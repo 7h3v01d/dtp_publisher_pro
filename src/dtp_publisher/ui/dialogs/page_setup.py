@@ -15,12 +15,19 @@ from ..widgets import ColorButton, UnitSpin, hint_label
 
 
 class PageSetupDialog(QDialog):
-    def __init__(self, state: dict, unit: str, multi_page: bool, parent=None):
+    def __init__(self, state: dict, unit: str, multi_page: bool, parent=None,
+                 sheet: Optional[dict] = None):
         super().__init__(parent)
         self.setWindowTitle("Page setup")
         self._unit = unit
         self._multi = multi_page
-        v = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        cols = QHBoxLayout()
+        outer.addLayout(cols)
+        v = QVBoxLayout()               # left column: paper and margins
+        right = QVBoxLayout()           # right column: guides, colour, label sheets
+        cols.addLayout(v)
+        cols.addLayout(right)
 
         g = QGroupBox("Paper size")
         f = QFormLayout(g)
@@ -55,6 +62,7 @@ class PageSetupDialog(QDialog):
         f2.addRow(hint_label("Most home printers can't print right to the edge — keep "
                              "important things at least 5 mm inside."))
         v.addWidget(g2)
+        v.addStretch(1)
 
         g3 = QGroupBox("Layout guides")
         f3 = QFormLayout(g3)
@@ -66,23 +74,61 @@ class PageSetupDialog(QDialog):
         f3.addRow("Columns:", self.sp_cols)
         f3.addRow("Rows:", self.sp_rows)
         f3.addRow("Gap between:", self.sp_gut)
-        v.addWidget(g3)
+        right.addWidget(g3)
 
         g4 = QGroupBox("Page colour")
         f4 = QFormLayout(g4)
         self.btn_bg = ColorButton("Background", allow_none=False, alpha=False)
         f4.addRow(self.btn_bg)
-        v.addWidget(g4)
+        right.addWidget(g4)
+
+        from ... import labels
+        g5 = QGroupBox("Labels and cards: several per sheet of paper")
+        f5 = QFormLayout(g5)
+        self.cb_sheet = QCheckBox("Print several pages on each sheet (labels, business cards)")
+        f5.addRow(self.cb_sheet)
+        self.cmb_sheet = QComboBox()
+        for lay in labels.PRESETS:
+            self.cmb_sheet.addItem(lay.name, lay.key)
+        f5.addRow("Label sheet:", self.cmb_sheet)
+        self.cmb_mode = QComboBox()
+        for key, text in labels.MODES.items():
+            self.cmb_mode.addItem(text, key)
+        f5.addRow("Printing:", self.cmb_mode)
+        f5.addRow(hint_label("Each page is one label. Do a test print on plain paper first and "
+                             "hold it against a label sheet to check the line-up."))
+        self._sheet_in = sheet
+        cur = labels.from_dict(sheet)
+        self.cb_sheet.setChecked(cur is not None)
+        if cur is not None:
+            i = self.cmb_sheet.findData(cur.key)
+            if i < 0:
+                self.cmb_sheet.addItem(cur.name, cur.key)
+                i = self.cmb_sheet.count() - 1
+            self.cmb_sheet.setCurrentIndex(i)
+            self.cmb_mode.setCurrentIndex(max(0, self.cmb_mode.findData(sheet.get("mode",
+                                                                                  "copies"))))
+        else:
+            guess = labels.detect(state["width"], state["height"])
+            if guess is not None:
+                self.cmb_sheet.setCurrentIndex(self.cmb_sheet.findData(guess.key))
+        for w in (self.cmb_sheet, self.cmb_mode):
+            w.setEnabled(self.cb_sheet.isChecked())
+            self.cb_sheet.toggled.connect(w.setEnabled)
+        self.cmb_sheet.currentIndexChanged.connect(self._sheet_size)
+        self.cb_sheet.toggled.connect(self._sheet_size)
+        right.addWidget(g5)
+        right.addStretch(1)
 
         self.cb_all = QCheckBox("Apply size, margins and guides to every page")
         self.cb_all.setChecked(True)
         self.cb_all.setVisible(multi_page)
-        v.addWidget(self.cb_all)
+        outer.addWidget(self.cb_all)
         bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                               | QDialogButtonBox.StandardButton.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
-        v.addWidget(bb)
+        outer.addWidget(bb)
 
         # populate
         self.sp_w.set_pt(state["width"])
@@ -153,6 +199,27 @@ class PageSetupDialog(QDialog):
                   gutter=self.sp_gut.pt(),
                   background=self.btn_bg.color().name(QColor.NameFormat.HexArgb))
         return st
+
+    def _sheet_size(self, _):
+        """Choosing a label sheet sets the page to the label size."""
+        from ... import labels
+        lay = labels.PRESET_BY_KEY.get(self.cmb_sheet.currentData())
+        if lay is not None and self.cb_sheet.isChecked():
+            self.sp_w.set_pt(mm(lay.label_w))
+            self.sp_h.set_pt(mm(lay.label_h))
+            self._sync_preset()
+            self._sync_orient()
+
+    def result_sheet(self) -> Optional[dict]:
+        from ... import labels
+        if not self.cb_sheet.isChecked():
+            return None
+        key = self.cmb_sheet.currentData()
+        lay = labels.PRESET_BY_KEY.get(key) or labels.from_dict(self._sheet_in)
+        if lay is None:
+            return None
+        new = labels.to_dict(lay, self.cmb_mode.currentData())
+        return self._sheet_in if new == self._sheet_in else new
 
     def apply_all(self) -> bool:
         return self._multi and self.cb_all.isChecked()

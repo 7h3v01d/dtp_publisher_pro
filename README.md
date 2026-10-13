@@ -61,7 +61,23 @@ the previous version is kept next to it as `name.dtpub.bak`.
 - **File ▸ Save as Picture** saves a JPEG or PNG.
 
 **Labels and business cards.** Design one card (or label), select it, then
-choose **Arrange ▸ Fill Page with Copies**.
+choose **Arrange ▸ Fill Page with Copies**. Or make each label its own page
+and tick **Page Setup ▸ Print several pages on each sheet**, then choose your
+Avery sheet: printing and PDFs put the labels in the right places on the
+sheet.
+
+**Opening Microsoft Publisher files.** Open a `.pub` file like any other (or
+drag it onto the window). This needs the free
+[LibreOffice](https://www.libreoffice.org/download/download-libreoffice/)
+installed; it reads the file in the background and you never see it. Big
+files can take a minute. Check the result over: fonts and spacing can differ a
+little, and text doesn't wrap around pictures yet. Your `.pub` file is not
+changed; **Save** makes a new `.dtpub` file next to it.
+
+**Text that carries on.** For newsletters, select a text box and choose
+**Insert ▸ Continue Text…**, then click an empty text box (on any page). Text
+that doesn't fit in the first box flows into the next. **Break Link** stops
+it.
 
 **Greeting cards.** Print the *Outside* page, put the paper back in the printer
 turned over, then print the *Inside* page.
@@ -98,7 +114,12 @@ src/dtp_publisher/
   scene.py          PageScene (one QGraphicsScene per page), guides, snapping, group moves
   commands.py       every undoable change (items, text, guides, pages, page setup)
   geometry.py       pure maths: Geo(x, y, w, h, rot), local<->parent mapping
-  items/            BaseItem + text, picture, shape, table, WordArt, group
+  items/            BaseItem + text, picture, shape, drawing (path), table, WordArt, group
+  textflow.py       linked text boxes: connect / disconnect (undoable), reload links
+  labels.py         label-sheet layouts (Avery presets) and the page → cell plan
+  importers/        .pub import: libreoffice.py (find + run headless), odg.py
+                    (ODG → pages, story re-linking), metafile.py (WMF/EMF pictures),
+                    pub.py (worker-thread converter + build)
   serialize.py      .dtpub JSON load/save (atomic, .bak), v3 migration, clipboard
   export.py         PDF / picture / print rendering
   templates.py      built-in designs (built with the normal item API)
@@ -131,14 +152,19 @@ run_tests.bat            (or: python -m pytest -q   with QT_QPA_PLATFORM=offscre
 revert_proofs.bat        (or: python tools/revert_proofs.py)
 ```
 
-132 tests run headless in about 15 seconds. `tools/revert_proofs.py`
+About 170 tests run headless in about 15 seconds. The importer tests use
+synthetic ODG/WMF data; to also run real Publisher files, point
+`DTP_PUB_SAMPLES` at a folder of `.pub` files (needs LibreOffice). Don't commit
+real `.pub` files — they usually contain names and addresses. `tools/revert_proofs.py`
 re-introduces each fixed bug in a temporary copy of `src/` and checks that its
 regression test fails (see `REVIEW.md`).
 
 ### File format
 
 `.dtpub` is UTF-8 JSON: `{"format": "dtpub", "version": 5, "view": {...},
-"pages": [{"name", "setup", "guides", "items": [...]}]}`. Text is stored as Qt
+"sheet": {...} | null, "pages": [{"name", "setup", "guides", "items": [...]}]}`.
+A linked story is stored once, in its first box; the other boxes hold
+`"linked": true` and each box's `"link_next"` uid. Text is stored as Qt
 rich-text HTML and pictures as base64. Photos larger than 3000 px are scaled
 down when inserted, so files stay a sensible size. The March prototype's
 `.json` layouts (format v3) open and are converted. Save them as `.dtpub`

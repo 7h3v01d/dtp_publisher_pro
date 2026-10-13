@@ -188,7 +188,7 @@ class CanvasView(QGraphicsView):
             if u.isLocalFile():
                 p = u.toLocalFile()
                 ext = os.path.splitext(p)[1].lower()
-                if ext in IMAGE_EXTS or ext in (".dtpub", ".json"):
+                if ext in IMAGE_EXTS or ext in (".dtpub", ".json", ".pub"):
                     out.append(p)
         return out
 

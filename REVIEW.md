@@ -41,10 +41,28 @@ Two weak tests were also found by the revert-proof run and tightened:
 - The PDF-coverage test counted QtPdf's transparent background as "dark".
 - The print-fit proof exposed that full-page mode zeroes the printer margins.
 
+## 5.1: Publisher import, linked text, label sheets
+
+Found while importing three real Publisher files (kept out of the
+repository; `DTP_PUB_SAMPLES` runs them locally):
+
+| Bug | How it showed | Fix | Test |
+|---|---|---|---|
+| Publisher's box height applied to every box | The diary's title was cut in half | Only boxes that turn out to be linked get Publisher's height back; others keep LibreOffice's | `test_odg_relinks_duplicated_story_and_restores_box_heights` |
+| Gradient opacity ignored | A see-through gradient over the diary cover hid the word "Diary" | `draw:opacity` / `draw:opacity-name` applied to both gradient colours | `test_odg_builds_page_master_background_text_and_shapes` |
+| Split story joined to the wrong box | The newsletter story carried on into the address line ("DEC 1997") | The continuation must start lower-case, be later in reading order on the same page and have the same column width | `test_odg_joins_split_story_to_same_width_box` |
+| `META_ESCAPE` counted as drawing | Publisher photos (WMF-wrapped bitmaps) were redrawn as vector art at low quality | 0x0626 removed from the drawing records | `test_wmf_photo_with_escape_record_is_unwrapped_as_bitmap` |
+
+LibreOffice's Publisher reader (libmspub) gives every box of a linked story
+the whole story and grows each box to fit. The importer groups boxes with
+identical text, links them in reading order (page, column, top), and restores
+Publisher's box height from `fo:min-height`.
+
 ## Not done yet (candidates for a later version)
 
-- Linked text boxes, so overflowing text flows into the next column or page.
-  Newsletters use separate boxes per column for now.
+- Text wrap around pictures. Imported newsletters can have a photo sitting
+  over a column; LibreOffice has the same gap.
+- Saving back to `.pub` (not possible: no program but Publisher writes it).
 - Master pages, as a shared background for every page. Headers, footers and
   page numbers can already be added to every page in one step.
 - Spell checking.

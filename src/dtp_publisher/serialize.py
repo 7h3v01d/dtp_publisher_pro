@@ -67,13 +67,27 @@ def item_from_dict(d: Dict[str, Any], warnings: Optional[List[str]] = None,
 
 
 # ── pages / documents ───────────────────────────────────────────────────────
-def page_to_dict(sc: PageScene) -> Dict[str, Any]:
+def page_to_dict(sc: PageScene, standalone: bool = False) -> Dict[str, Any]:
+    conv = standalone_dict if standalone else item_to_dict
     return {
         "name": sc.name,
         "setup": sc.setup_state(),
         "guides": sc.guide_state(),
-        "items": [item_to_dict(it) for it in sc.top_items()],
+        "items": [conv(it) for it in sc.top_items()],
     }
+
+
+def standalone_dict(it: BaseItem) -> Dict[str, Any]:
+    """Item dict for a copy: a linked text box keeps just the text it shows."""
+    from .items.text import TextItem
+    d = it.to_dict()
+    if isinstance(it, TextItem) and it.is_linked():
+        d["html"] = it.slice_html()
+        d.pop("linked", None)
+        d.pop("link_next", None)
+    elif isinstance(it, GroupItem):
+        d["children"] = [standalone_dict(m) for m in it.members()]
+    return d
 
 
 def page_from_dict(doc: Document, d: Dict[str, Any], warnings: List[str]) -> PageScene:
@@ -98,6 +112,7 @@ def document_to_dict(doc: Document) -> Dict[str, Any]:
         "app_version": __version__,
         "title": doc.title,
         "view": doc.view.to_dict(),
+        "sheet": doc.sheet,
         "pages": [page_to_dict(sc) for sc in doc.pages],
     }
 
@@ -116,6 +131,8 @@ def document_from_dict(data: Dict[str, Any], doc: Optional[Document] = None
     if isinstance(ver, int) and ver > FORMAT_VERSION:
         warnings.append("This file was made by a newer version; some features may be missing.")
     doc = doc or Document()
+    if isinstance(data.get("sheet"), dict):
+        doc.sheet = dict(data["sheet"])
     if isinstance(data.get("view"), dict):
         doc.view.update_from(data["view"])
     doc.title = str(data.get("title", ""))[:200]
@@ -124,6 +141,8 @@ def document_from_dict(data: Dict[str, Any], doc: Optional[Document] = None
             doc.add_page(page_from_dict(doc, pd, warnings))
     if not doc.pages:
         doc.add_page(doc.make_page())
+    from .textflow import resolve_links
+    resolve_links(doc.text_items())
     doc.undo_stack.clear()
     return doc, warnings
 
@@ -300,7 +319,8 @@ CLIP_MIME = "application/x-dtpub-items"
 
 
 def items_to_clip(items: List[BaseItem]) -> bytes:
-    return json.dumps({"format": FORMAT, "items": [it.to_dict() for it in items]}).encode("utf-8")
+    return json.dumps({"format": FORMAT, "items": [standalone_dict(it) for it in items]}
+                      ).encode("utf-8")
 
 
 def items_from_clip(raw: bytes) -> List[BaseItem]:
@@ -326,7 +346,7 @@ def fresh_uids(it: BaseItem):
 
 
 def clone_item(it: BaseItem, offset: QPointF = QPointF(0, 0)) -> Optional[BaseItem]:
-    c = item_from_dict(it.to_dict())
+    c = item_from_dict(standalone_dict(it))
     if c is None:
         return None
     fresh_uids(c)

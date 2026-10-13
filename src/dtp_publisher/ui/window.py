@@ -48,7 +48,9 @@ from .panels.thumbs import ThumbPanel
 from .ribbon import Ribbon
 
 PICTURE_FILTER = "Pictures (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tif *.tiff)"
-DOC_FILTER = f"Publications (*{FILE_EXT});;Older layouts from version 4 (*.json)"
+DOC_FILTER = (f"Everything I can open (*{FILE_EXT} *.pub *.json);;"
+              f"Publications (*{FILE_EXT});;Microsoft Publisher files (*.pub);;"
+              "Older layouts from version 4 (*.json)")
 NUDGE, NUDGE_BIG = 1.0, mm(5)
 
 
@@ -63,6 +65,8 @@ class MainWindow(QMainWindow):
         self._prev_undo_index = 0
         self._paste_count = 0
         self._copy_scene: Optional[PageScene] = None
+        self._link_from: Optional[TextItem] = None
+        self._pub_source: Optional[str] = None
         self.setWindowIcon(icon("wordart", 64))
         self.resize(1500, 950)
         self.setAcceptDrops(False)
@@ -152,6 +156,10 @@ class MainWindow(QMainWindow):
         A("ins_placeholder", "Picture Frame", self.insert_placeholder, "placeholder", None,
           "Add an empty frame to put a picture in later")
         A("ins_table", "Table", self.insert_table, "table", None, "Add a table")
+        A("link_text", "Continue Text…", self.start_link, "link", None,
+          "Let the text in this box flow on into another box (on any page)")
+        A("unlink_text", "Break Text Link", self.break_link, "unlink", None,
+          "Stop the text flowing from this box into the next one")
         A("ins_wordart", "WordArt", self.insert_wordart, "wordart", None,
           "Add a decorative headline")
         for k, name in SHAPES.items():
@@ -419,6 +427,7 @@ class MainWindow(QMainWindow):
         g.add_large(a["ins_text"])
         g.add_large(a["ins_wordart"])
         g.add_large(a["ins_table"])
+        g.add_smalls([a["link_text"], a["unlink_text"]])
         g = p.group("Pictures")
         g.add_large(a["ins_picture"])
         g.add_large(a["ins_placeholder"])
@@ -511,6 +520,7 @@ class MainWindow(QMainWindow):
 
     def set_document(self, doc: Document):
         self._detach_doc()
+        self._pub_source = None
         self.doc = doc
         st = doc.undo_stack
         self._doc_conns = [
@@ -523,6 +533,7 @@ class MainWindow(QMainWindow):
             (doc.pagesChanged, self._pages_changed),
             (doc.pageContentChanged, self._content_changed),
             (doc.view.changed, self._view_changed),
+            (doc.showPageRequested, self._show_scene),
         ]
         for sig, slot in self._doc_conns:
             sig.connect(slot)
@@ -550,6 +561,10 @@ class MainWindow(QMainWindow):
         self.props.set_items(None, [])
         self.view.setScene(None)
         self.scene = None
+
+    def _show_scene(self, sc):
+        if self.doc is not None and sc in self.doc.pages and sc is not self.scene:
+            self.show_page(self.doc.index_of(sc))
 
     def page_index(self) -> int:
         return self.doc.index_of(self.scene) if self.doc and self.scene else 0
@@ -654,8 +669,12 @@ class MainWindow(QMainWindow):
     def _update_page_label(self):
         if self.doc and self.scene:
             sc = self.scene
+            from .. import labels
+            lay = labels.from_dict(self.doc.sheet)
+            extra = f"   ·   labels: {lay.per_sheet} per sheet" if lay else ""
             self.lbl_page.setText(f"Page {self.page_index() + 1} of {len(self.doc.pages)}"
-                                  f"   ·   {describe_size(sc.page_w, sc.page_h, self.settings.units)}")
+                                  f"   ·   {describe_size(sc.page_w, sc.page_h, self.settings.units)}"
+                                  + extra)
 
     # ═══════════════════════════════════════════════════════════════════════
     # selection & state
@@ -767,6 +786,10 @@ class MainWindow(QMainWindow):
         a["dist_v"].setEnabled(len(unlocked) >= 3)
         a["fill_page"].setEnabled(len(unlocked) == 1)
         a["edit_text"].setEnabled(n == 1 and isinstance(items[0], TextItem))
+        one_text = items[0] if n == 1 and isinstance(items[0], TextItem) else None
+        a["link_text"].setEnabled(one_text is not None and one_text.link_next is None
+                                  and not one_text.auto)
+        a["unlink_text"].setEnabled(one_text is not None and one_text.link_next is not None)
         a["page_del"].setEnabled(len(self.doc.pages) > 1)
         idx = self.page_index()
         a["page_up"].setEnabled(idx > 0)
@@ -849,6 +872,9 @@ class MainWindow(QMainWindow):
         self._select([i for i in self.scene.top_items() if i.isVisible()])
 
     def deselect(self):
+        if getattr(self, "_link_from", None) is not None:
+            self._end_link_mode("Cancelled.")
+            return
         ed = self.editing_item()
         if ed is not None:
             ed.end_edit()
@@ -1117,6 +1143,72 @@ class MainWindow(QMainWindow):
             st.endMacro()
         refresh_fields(self.doc)
 
+    # ── linked text boxes ────────────────────────────────────────────────────
+    def start_link(self):
+        items = self.selected()
+        if len(items) != 1 or not isinstance(items[0], TextItem):
+            return
+        self._link_from = items[0]
+        self.view.viewport().installEventFilter(self)
+        self.view.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
+        self.statusBar().showMessage(
+            "Click the box the text should continue in — you can change page first. "
+            "Press Esc to cancel.")
+
+    def _end_link_mode(self, msg: str = ""):
+        self._link_from = None
+        self.view.viewport().removeEventFilter(self)
+        self.view.viewport().unsetCursor()
+        self.statusBar().showMessage(msg, 5000)
+
+    def link_boxes(self, a: TextItem, b: TextItem) -> bool:
+        from ..textflow import LinkCmd, can_connect
+        why = can_connect(a, b)
+        if why:
+            QMessageBox.information(self, "Continue text", why)
+            return False
+        if not b.chain_root().is_empty():
+            r = QMessageBox.question(self, "Continue text",
+                                     "That box already has text in it. Its text will be added "
+                                     "to the end of the story. Carry on?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if r != QMessageBox.StandardButton.Yes:
+                return False
+        self.doc.undo_stack.push(LinkCmd(b.page_scene() or a.page_scene(), a, b))
+        return True
+
+    def break_link(self):
+        from ..textflow import UnlinkCmd
+        items = self.selected()
+        if len(items) == 1 and isinstance(items[0], TextItem) and items[0].link_next is not None:
+            self.doc.undo_stack.push(UnlinkCmd(self.scene, items[0]))
+            self._update_actions()
+
+    def eventFilter(self, obj, e):
+        from PyQt6.QtCore import QEvent
+        src = getattr(self, "_link_from", None)
+        if src is not None and obj is self.view.viewport():
+            if e.type() == QEvent.Type.MouseButtonPress:
+                if e.button() != Qt.MouseButton.LeftButton:
+                    self._end_link_mode("Cancelled.")
+                    return True
+                sp = self.view.mapToScene(e.position().toPoint())
+                target = next((i for i in self.scene.items(sp)
+                               if isinstance(i, TextItem)), None)
+                if target is None:
+                    self.statusBar().showMessage("That isn't a text box — click a text box, "
+                                                 "or press Esc to cancel.")
+                    return True
+                ok = self.link_boxes(src, target)
+                self._end_link_mode("The text now continues in that box." if ok else "")
+                if ok:
+                    self._select([target])
+                return True
+            if e.type() == QEvent.Type.KeyPress and e.key() == Qt.Key.Key_Escape:
+                self._end_link_mode("Cancelled.")
+                return True
+        return super().eventFilter(obj, e)
+
     def _item_activated(self, item):
         if isinstance(item, ImageItem):
             if not item.locked:
@@ -1143,7 +1235,7 @@ class MainWindow(QMainWindow):
             self.edit_wordart(one)
 
     def _files_dropped(self, paths: List[str], at: QPointF):
-        docs = [p for p in paths if p.lower().endswith((".dtpub", ".json"))]
+        docs = [p for p in paths if p.lower().endswith((".dtpub", ".json", ".pub"))]
         if docs:
             self.open_path(docs[0])
             return
@@ -1352,7 +1444,7 @@ class MainWindow(QMainWindow):
 
     def page_duplicate(self):
         self._end_edits()
-        data = page_to_dict(self.scene)
+        data = page_to_dict(self.scene, standalone=True)
         sc = page_from_dict(self.doc, data, [])
         for it in sc.top_items():
             fresh_uids(it)
@@ -1405,10 +1497,17 @@ class MainWindow(QMainWindow):
 
     def page_setup(self):
         sc = self.scene
-        dlg = PageSetupDialog(sc.setup_state(), self.settings.units, len(self.doc.pages) > 1, self)
+        dlg = PageSetupDialog(sc.setup_state(), self.settings.units, len(self.doc.pages) > 1, self,
+                              sheet=self.doc.sheet)
         if not dlg.exec():
             return
         new = dlg.result_state(sc.setup_state())
+        new_sheet = dlg.result_sheet()
+        st = self.doc.undo_stack
+        st.beginMacro("Page setup")
+        if new_sheet != self.doc.sheet:
+            from ..commands import SheetCmd
+            st.push(SheetCmd(self.doc, self.doc.sheet, new_sheet))
         scenes = self._scenes_for_setup(dlg.apply_all())
         olds = [s.setup_state() for s in scenes]
         news = []
@@ -1420,6 +1519,7 @@ class MainWindow(QMainWindow):
                 n["background"] = new["background"]
             news.append(n)
         self.doc.undo_stack.push(PageSetupCmd(scenes, olds, news))
+        st.endMacro()
         self._after_setup()
 
     def _after_setup(self):
@@ -1485,6 +1585,9 @@ class MainWindow(QMainWindow):
             one = items[0] if len(items) == 1 else None
             if isinstance(one, TextItem):
                 m.addAction(self.acts["edit_text"])
+                m.addAction(self.acts["link_text"])
+                if one.link_next is not None:
+                    m.addAction(self.acts["unlink_text"])
             if isinstance(one, ImageItem):
                 m.addAction(icon("picture", 18), "Change Picture…", lambda: self.change_picture(one))
             if isinstance(one, TableItem):
@@ -1582,6 +1685,75 @@ class MainWindow(QMainWindow):
         elif dlg.open_other:
             self.open_dialog(ask=False)
 
+    # ── Microsoft Publisher import ───────────────────────────────────────────
+    def import_publisher(self, path: str) -> bool:
+        from PyQt6.QtWidgets import QProgressDialog
+        from ..importers.pub import (LIBREOFFICE_URL, PubConverter, build_from_odg,
+                                     find_soffice)
+        if not find_soffice():
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Information)
+            box.setWindowTitle("Open a Publisher file")
+            box.setText("To open Microsoft Publisher files, the free LibreOffice program "
+                        "needs to be installed on this computer.")
+            box.setInformativeText("Install LibreOffice, then try again. It is only used in "
+                                   "the background to read the file.")
+            get = box.addButton("Get LibreOffice", QMessageBox.ButtonRole.AcceptRole)
+            box.addButton("Close", QMessageBox.ButtonRole.RejectRole)
+            box.exec()
+            if box.clickedButton() is get:
+                QDesktopServices.openUrl(QUrl(LIBREOFFICE_URL))
+            return False
+        dlg = QProgressDialog(f"Opening {os.path.basename(path)}…\n"
+                              "Big publications can take a minute.", "Cancel", 0, 0, self)
+        dlg.setWindowTitle("Open a Publisher file")
+        dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        dlg.setMinimumDuration(0)
+        conv = PubConverter(path, self)
+        result = {}
+        conv.converted.connect(lambda p: (result.__setitem__("odg", p), dlg.reset()))
+        conv.failed.connect(lambda m: (result.__setitem__("err", m), dlg.reset()))
+        dlg.canceled.connect(conv.cancel)
+        conv.start()
+        dlg.exec()
+        conv._stop()
+        conv.deleteLater()
+        if "odg" not in result:
+            msg = result.get("err", "Cancelled.")
+            if msg != "Cancelled.":
+                QMessageBox.warning(self, "Open a Publisher file",
+                                    f"Sorry, that Publisher file could not be opened.\n\n{msg}")
+            return False
+        odg = result["odg"]
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            doc, rep = build_from_odg(odg, path)
+        except Exception as ex:  # noqa: BLE001 - damaged conversions must not crash
+            QApplication.restoreOverrideCursor()
+            QMessageBox.warning(self, "Open a Publisher file",
+                                f"Sorry, that Publisher file could not be read.\n\n{ex}")
+            return False
+        finally:
+            import shutil
+            shutil.rmtree(os.path.dirname(os.path.dirname(odg)), ignore_errors=True)
+        QApplication.restoreOverrideCursor()
+        self.autosaver.discard()
+        self.set_document(doc)
+        doc.undo_stack.resetClean()                 # it still needs saving as .dtpub
+        self._update_title()
+        self._pub_source = path
+        self.settings.add_recent(path)
+        self.settings.last_folder = os.path.dirname(path)
+        self.settings.save()
+        notes = "\n".join(f"• {w}" for w in rep.warnings[:10])
+        QMessageBox.information(
+            self, "Publisher file opened",
+            f"Opened {os.path.basename(path)}: {rep.summary()}.\n\n"
+            "Please check it over — fonts, spacing and text wrapping can differ a little "
+            "from Publisher. When you save, it will be saved as a new DTP Publisher file; "
+            "your original .pub file is not changed." + (f"\n\nNotes:\n{notes}" if notes else ""))
+        return True
+
     def _adopt_new(self, doc: Document):
         self.autosaver.discard()
         self.set_document(doc)
@@ -1597,6 +1769,8 @@ class MainWindow(QMainWindow):
     def open_path(self, path: str, ask: bool = True) -> bool:
         if ask and not self.maybe_save():
             return False
+        if path.lower().endswith(".pub"):
+            return self.import_publisher(path)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             doc, warnings = load_document(path)
@@ -1626,6 +1800,8 @@ class MainWindow(QMainWindow):
         start = self.doc.path or os.path.join(self.settings.last_folder or
                                               os.path.expanduser("~"),
                                               (self.doc.title or "My publication") + FILE_EXT)
+        if not self.doc.path and getattr(self, "_pub_source", None) and self.doc.title:
+            start = os.path.join(os.path.dirname(self._pub_source), self.doc.title + FILE_EXT)
         path, _ = QFileDialog.getSaveFileName(self, "Save publication", start,
                                               f"Publications (*{FILE_EXT})")
         if not path:

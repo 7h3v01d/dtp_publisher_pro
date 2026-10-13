@@ -315,6 +315,9 @@ class PropertiesPanel(QWidget):
         self.lbl_op.setText(f"{op}%")
         if isinstance(it, TextItem):
             _set_combo(self.cmb_fit, it.fit)
+            self.cmb_fit.setEnabled(not it.is_linked())
+            self.cmb_fit.setToolTip("Linked boxes flow text from one to the next instead of "
+                                    "fitting it." if it.is_linked() else "")
             _set_combo(self.cmb_valign, it.valign)
             self.sp_pad.set_pt(it.padding)
         if isinstance(it, ImageItem):

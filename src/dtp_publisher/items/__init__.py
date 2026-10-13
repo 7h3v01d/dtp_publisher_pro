@@ -5,13 +5,14 @@
 from .base import BaseItem
 from .group import GroupItem
 from .image import ImageItem
+from .path import PathItem
 from .shape import ShapeItem
 from .table import TableItem
 from .text import TextItem
 from .wordart import WordArtItem
 
 ITEM_TYPES = {cls.KIND: cls for cls in
-              (TextItem, ShapeItem, ImageItem, TableItem, WordArtItem, GroupItem)}
+              (TextItem, ShapeItem, ImageItem, TableItem, WordArtItem, GroupItem, PathItem)}
 
 __all__ = ["BaseItem", "TextItem", "ShapeItem", "ImageItem", "TableItem", "WordArtItem",
-           "GroupItem", "ITEM_TYPES"]
+           "GroupItem", "PathItem", "ITEM_TYPES"]

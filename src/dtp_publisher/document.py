@@ -68,6 +68,7 @@ class ViewOptions(QObject):
 class Document(QObject):
     pagesChanged = pyqtSignal()           # structure: add/remove/move/rename
     pageContentChanged = pyqtSignal(object)  # PageScene whose content changed
+    showPageRequested = pyqtSignal(object)   # e.g. typing flowed into a box on another page
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
@@ -76,6 +77,7 @@ class Document(QObject):
         self.pages: List["PageScene"] = []
         self.path: Optional[str] = None
         self.title = ""
+        self.sheet: Optional[dict] = None     # label sheet layout (print N pages per sheet)
         self.view.changed.connect(self._view_changed)
 
     # ── page factory / structure (raw; undoable wrappers live in commands) ──
@@ -134,6 +136,10 @@ class Document(QObject):
     def all_items(self):
         for sc in self.pages:
             yield from sc.all_design_items()
+
+    def text_items(self):
+        from .items.text import TextItem
+        return [i for i in self.all_items() if isinstance(i, TextItem)]
 
     def _view_changed(self):
         for sc in self.pages:

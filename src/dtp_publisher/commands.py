@@ -380,3 +380,19 @@ class RenamePageCmd(SceneCommand):
     def undo(self):
         self.scene.name = self.old
         self.doc.pagesChanged.emit()
+
+
+class SheetCmd(SceneCommand):
+    """Change the label-sheet layout (print several pages per sheet)."""
+
+    def __init__(self, doc: "Document", old, new):
+        super().__init__("Label sheet", None)
+        self.doc, self.old, self.new = doc, old, new
+
+    def redo(self):
+        self.doc.sheet = self.new
+        self.doc.pagesChanged.emit()
+
+    def undo(self):
+        self.doc.sheet = self.old
+        self.doc.pagesChanged.emit()

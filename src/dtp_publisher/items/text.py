@@ -11,15 +11,21 @@
     grow   – the frame grows/shrinks in height to fit the text
 * Editing happens in place (double-click); the whole edit session becomes a
   single undo step when editing ends.
+* Linked text boxes: boxes can be chained (``link_next``/``link_prev``).  The
+  first box of a chain owns the story's QTextDocument and every box in the
+  chain displays that same document, each showing its own slice cut at line
+  boundaries.  Boxes that are deleted (not in a scene) are skipped, so undo of
+  a delete simply puts the box back into the flow.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import (QBrush, QColor, QFont, QImage, QPainter, QPen, QTextBlockFormat,
-                         QTextCharFormat, QTextCursor, QTextListFormat, QTextOption)
+from PyQt6.QtGui import (QBrush, QColor, QFont, QImage, QPainter, QPainterPath, QPen,
+                         QTextBlockFormat, QTextCharFormat, QTextCursor, QTextDocument,
+                         QTextDocumentFragment, QTextListFormat, QTextOption)
 from PyQt6.QtWidgets import QGraphicsTextItem, QStyle, QStyleOptionGraphicsItem
 
 from .. import theme
@@ -68,14 +74,26 @@ class _FrameText(QGraphicsTextItem):
         self.frame = frame
         self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setAcceptHoverEvents(False)
+        # get a real exposed rect, so a box showing page 9 of a long linked story
+        # only draws the lines it shows
+        self.setFlag(self.GraphicsItemFlag.ItemUsesExtendedStyleOption, True)
 
     def paint(self, p: QPainter, option, widget=None):
         o = QStyleOptionGraphicsItem(option)
         o.state = o.state & ~(QStyle.StateFlag.State_Selected | QStyle.StateFlag.State_HasFocus)
+        clip = self.frame.clip_rect_in_child()
+        o.exposedRect = o.exposedRect.intersected(clip.adjusted(-2, -2, 2, 2))
         p.save()
-        p.setClipRect(self.frame.clip_rect_in_child())
+        p.setClipRect(clip)
         super().paint(p, o, widget)
         p.restore()
+
+    def shape(self) -> QPainterPath:
+        # only the visible part of the document catches clicks (the document of a
+        # linked story can be many pages tall)
+        p = QPainterPath()
+        p.addRect(self.frame.clip_rect_in_child())
+        return p
 
     def focusOutEvent(self, e):
         super().focusOutEvent(e)
@@ -123,8 +141,16 @@ class TextItem(BaseItem):
         self._scale = 1.0
         self._edit_html = ""
         self._refitting = False
+        self.link_next: Optional["TextItem"] = None
+        self.link_prev: Optional["TextItem"] = None
+        self._pending_next = ""                       # uid to link to after loading
+        self._slice: Tuple[float, float] = (0.0, 0.0)        # visible doc y-range (linked)
+        self._slice_pos: Tuple[int, int] = (0, 0)            # visible char range (linked)
         self._ti = _FrameText(self)
-        doc = self._ti.document()
+        # the item owns its document (parented to the item, not the text control,
+        # so it survives being swapped out while this box shows a linked story)
+        doc = QTextDocument(self)
+        self._own_doc = doc
         doc.documentLayout().setPaintDevice(layout_device())
         doc.setUseDesignMetrics(True)
         doc.setDocumentMargin(0)
@@ -132,6 +158,7 @@ class TextItem(BaseItem):
         opt.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         doc.setDefaultTextOption(opt)
         doc.setDefaultFont(QFont(DEFAULT_FAMILY, int(DEFAULT_SIZE)))
+        self._ti.setDocument(doc)
         self._ti.setDefaultTextColor(self.text_color)
         self._set_block_defaults()
         doc.contentsChanged.connect(self._on_contents_changed)
@@ -229,6 +256,10 @@ class TextItem(BaseItem):
         return QRectF(p, p, max(self._w - 2 * p, 2.0), max(self._h - 2 * p, 2.0))
 
     def clip_rect_in_child(self) -> QRectF:
+        if self.is_linked():
+            a, b = self._slice
+            tl = self._ti.pos()
+            return QRectF(-tl.x(), a, self._w, max(b - a, 0.0))
         s = self._ti.scale() or 1.0
         tl = self._ti.pos()
         r = self.rect()
@@ -256,6 +287,9 @@ class TextItem(BaseItem):
         return lo
 
     def refit(self):
+        if self.is_linked():
+            self.chain_root().layout_chain()
+            return
         if self._refitting:
             return
         self._refitting = True
@@ -298,6 +332,14 @@ class TextItem(BaseItem):
             self._ti.setDefaultTextColor(self.text_color)
 
     def _on_contents_changed(self):
+        # fired by this item's *own* document, i.e. when it is a story's owner
+        if self.is_linked():
+            self.layout_chain()
+            for f in self.chain():
+                f.update()
+                if f.editing:
+                    f.notify_caret()
+            return
         self.refit()
         self.update()
         self.notify_caret()
@@ -305,7 +347,145 @@ class TextItem(BaseItem):
     def notify_caret(self):
         sc = self.page_scene()
         if sc is not None and self.editing:
+            if self.is_linked() and self._follow_caret():
+                return
             sc.textFormatChanged.emit(self)
+
+    # ── linked text boxes ────────────────────────────────────────────────────
+    def is_linked(self) -> bool:
+        return self.link_next is not None or self.link_prev is not None
+
+    def chain_root(self) -> "TextItem":
+        t, seen = self, {id(self)}
+        while t.link_prev is not None and id(t.link_prev) not in seen:
+            t = t.link_prev
+            seen.add(id(t))
+        return t
+
+    def chain(self) -> List["TextItem"]:
+        out, t, seen = [], self.chain_root(), set()
+        while t is not None and id(t) not in seen:
+            out.append(t)
+            seen.add(id(t))
+            t = t.link_next
+        return out
+
+    def live_chain(self) -> List["TextItem"]:
+        return [f for f in self.chain() if f.scene() is not None]
+
+    def story_owner(self) -> "TextItem":
+        return self.chain_root()
+
+    def next_live(self) -> Optional["TextItem"]:
+        t, seen = self.link_next, set()
+        while t is not None and id(t) not in seen:
+            if t.scene() is not None:
+                return t
+            seen.add(id(t))
+            t = t.link_next
+        return None
+
+    @staticmethod
+    def _line_spans(doc: QTextDocument) -> List[Tuple[float, float, int, int]]:
+        """(top, bottom, first_char, end_char) for every laid-out line."""
+        lay = doc.documentLayout()
+        lay.documentSize()                       # make sure layout is current
+        spans = []
+        b = doc.begin()
+        while b.isValid():
+            top = lay.blockBoundingRect(b).top()
+            bl = b.layout()
+            for i in range(bl.lineCount()):
+                ln = bl.lineAt(i)
+                t = top + ln.y()
+                spans.append((t, t + ln.height(), b.position() + ln.textStart(),
+                              b.position() + ln.textStart() + ln.textLength()))
+            b = b.next()
+        return spans
+
+    def layout_chain(self):
+        """Flow the story through the live boxes of the chain (call on the root)."""
+        frames = self.live_chain()
+        if not frames:
+            return
+        doc = self._own_doc
+        doc.setTextWidth(max(frames[0].inner_rect().width(), 1.0))
+        lines = self._line_spans(doc)
+        k, offset, pos = 0, 0.0, 0
+        for f in frames:
+            f._scale = 1.0
+            f._ti.setScale(1.0)
+            inner = f.inner_rect()
+            start, end = offset, offset + inner.height()
+            cut, first, last = start, pos, pos
+            while k < len(lines) and lines[k][1] <= end + 0.5:
+                cut, last = lines[k][1], lines[k][3]
+                k += 1
+            if cut == start and k < len(lines) and inner.height() >= 4:
+                # a single line taller than the box: show it rather than stall
+                cut, last = lines[k][1], lines[k][3]
+                k += 1
+            f._slice = (start, cut)
+            f._slice_pos = (first, last)
+            f._ti.setPos(inner.left(), inner.top() - start)
+            f.overflow = False
+            f.prepareGeometryChange()
+            f.update()
+            f._ti.update()
+            if k < len(lines):
+                offset, pos = lines[k][0], lines[k][2]
+            else:
+                offset, pos = cut + 1e6, doc.characterCount()
+        frames[-1].overflow = k < len(lines)
+
+    def slice_html(self) -> str:
+        """HTML of just the text this linked box shows (for copies)."""
+        a, b = self._slice_pos
+        c = QTextCursor(self.document)
+        c.setPosition(min(a, self.document.characterCount() - 1))
+        c.setPosition(min(b, self.document.characterCount() - 1),
+                      QTextCursor.MoveMode.KeepAnchor)
+        return QTextDocumentFragment(c).toHtml()
+
+    def _follow_caret(self) -> bool:
+        """Move the editing session to the box that now shows the caret."""
+        c = self._ti.textCursor()
+        blk = c.block()
+        lay = self.document.documentLayout()
+        bl = blk.layout()
+        ln = bl.lineForTextPosition(c.positionInBlock())
+        y = lay.blockBoundingRect(blk).top() + (ln.y() if ln.isValid() else 0.0)
+        a, b = self._slice
+        if a - 0.5 <= y < b - 0.5 or (b <= a and y >= a):
+            return False
+        for g in self.live_chain():
+            ga, gb = g._slice
+            if g is not self and ga - 0.5 <= y < gb - 0.5:
+                self._hand_edit_to(g, c)
+                return True
+        return False
+
+    def _hand_edit_to(self, g: "TextItem", cursor: QTextCursor):
+        session = self._edit_html
+        self.editing = False
+        self._ti.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self._ti.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        g.editing = True
+        g._edit_html = session
+        g._ti.setTextInteractionFlags(Qt.TextInteractionFlag.TextEditorInteraction)
+        g._ti.setAcceptedMouseButtons(Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton)
+        sc = g.page_scene()
+        if sc is not None and sc is not self.page_scene() and sc.doc is not None:
+            sc.doc.showPageRequested.emit(sc)
+        g._ti.setFocus(Qt.FocusReason.OtherFocusReason)
+        gc = g._ti.textCursor()
+        gc.setPosition(cursor.anchor())
+        gc.setPosition(cursor.position(), QTextCursor.MoveMode.KeepAnchor)
+        g._ti.setTextCursor(gc)
+        self.update()
+        g.update()
+        if sc is not None:
+            sc.textEditingChanged.emit(g)
 
     # ── editing ──────────────────────────────────────────────────────────────
     def on_double_click(self, e):
@@ -433,6 +613,12 @@ class TextItem(BaseItem):
         lst = c.currentList()
         return lst.format().style() if lst is not None else None
 
+    def itemChange(self, change, value):
+        r = super().itemChange(change, value)
+        if (change == self.GraphicsItemChange.ItemSceneHasChanged and self.is_linked()):
+            self.chain_root().layout_chain()      # a box left or rejoined the flow
+        return r
+
     # ── painting ─────────────────────────────────────────────────────────────
     def paint_content(self, p: QPainter):
         if self.fill.alpha() or self.stroke_width > 0:
@@ -443,6 +629,11 @@ class TextItem(BaseItem):
     def paint_overlay(self, p: QPainter):
         super().paint_overlay(p)
         z = self._zoom()
+        if self.is_linked():
+            self._paint_link_marks(p, z)
+            if self.overflow:
+                self._paint_overflow(p, z)
+            return
         if self.is_empty() and not self.editing:
             p.save()
             p.setPen(theme.color("c_bounds"))
@@ -453,25 +644,64 @@ class TextItem(BaseItem):
                        "Double-click to type")
             p.restore()
         if self.overflow:
-            s = 16 / z
-            r = QRectF(self._w - s - 2 / z, self._h - s - 2 / z, s, s)
-            p.save()
-            pen = QPen(theme.color("c_snap"), 1.5)
-            pen.setCosmetic(True)
+            self._paint_overflow(p, z)
+
+    def _paint_link_marks(self, p: QPainter, z: float):
+        if not (self.isSelected() or self.editing):
+            return
+        s = 15 / z
+        col = theme.color("c_select")
+        p.save()
+        pen = QPen(col, 1.5)
+        pen.setCosmetic(True)
+        f = QFont(theme.tokens()["font"])
+        f.setPointSizeF(max(9.0 / z, 0.5))
+        f.setBold(True)
+        p.setFont(f)
+        for r, label, show in ((QRectF(2 / z, 2 / z, s, s), "\u2190", self.link_prev is not None),
+                               (QRectF(self._w - s - 2 / z, self._h - s - 2 / z, s, s), "\u2192",
+                                self.link_next is not None and not self.overflow)):
+            if not show:
+                continue
             p.setPen(pen)
             p.setBrush(QColor(255, 255, 255))
             p.drawRect(r)
-            p.setBrush(theme.color("c_snap"))
-            d = s / 9
-            for i in range(3):
-                p.drawEllipse(QPointF(r.left() + s * (0.25 + 0.25 * i), r.center().y()), d, d)
-            p.restore()
+            p.drawText(r, Qt.AlignmentFlag.AlignCenter, label)
+        p.restore()
+
+    def _paint_overflow(self, p: QPainter, z: float):
+        s = 16 / z
+        r = QRectF(self._w - s - 2 / z, self._h - s - 2 / z, s, s)
+        p.save()
+        pen = QPen(theme.color("c_snap"), 1.5)
+        pen.setCosmetic(True)
+        p.setPen(pen)
+        p.setBrush(QColor(255, 255, 255))
+        p.drawRect(r)
+        p.setBrush(theme.color("c_snap"))
+        d = s / 9
+        for i in range(3):
+            p.drawEllipse(QPointF(r.left() + s * (0.25 + 0.25 * i), r.center().y()), d, d)
+        p.restore()
 
     # ── serialisation ────────────────────────────────────────────────────────
+    def writes_story(self) -> bool:
+        """The first live box of a chain stores the story; the others store nothing."""
+        if not self.is_linked():
+            return True
+        live = self.live_chain()
+        return (live[0] is self) if live else (self.chain_root() is self)
+
     def extra_to_dict(self) -> Dict[str, Any]:
-        return {"html": self.html(), "fit": self.fit, "valign": self.valign,
-                "padding": self.padding, "text_color": color_to_str(self.text_color),
-                "auto": self.auto}
+        d = {"html": self.html() if self.writes_story() else "", "fit": self.fit,
+             "valign": self.valign, "padding": self.padding,
+             "text_color": color_to_str(self.text_color), "auto": self.auto}
+        if self.is_linked():
+            d["linked"] = True
+            nxt = self.next_live()
+            if nxt is not None:
+                d["link_next"] = nxt.uid
+        return d
 
     def apply_extra(self, d: Dict[str, Any]):
         self.fit = d.get("fit") if d.get("fit") in FIT_MODES else "none"
@@ -481,6 +711,7 @@ class TextItem(BaseItem):
         self.auto = a if a in ("page", "page_of", "date") else ""
         self.text_color = color_from(d.get("text_color"), self.text_color)
         self._ti.setDefaultTextColor(self.text_color)
+        self._pending_next = str(d.get("link_next") or "")[:64]
         html = d.get("html")
         if isinstance(html, str):
             self.document.setHtml(html)

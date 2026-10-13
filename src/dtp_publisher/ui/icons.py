@@ -642,7 +642,20 @@ def _rename(d):
     d.line(5, 12, 10, 12)
 
 
+def _link(broken):
+    def f(d):
+        d.rect(2.5, 4, 8, 11)
+        d.rect(13.5, 9, 8, 11, fill=_soft(d.ac, 60))
+        d.pen(d.ac, 2)
+        if broken:
+            d.line(10.5, 9.5, 12, 11, 12.5, 14, 13.5, 15.5)
+        else:
+            d.arrow(8, 12, 16, 12, 3)
+    return f
+
+
 ICONS: Dict[str, Callable] = {
+    "link": _link(False), "unlink": _link(True),
     "move_up": _move(True), "move_down": _move(False), "rename": _rename,
     "new": _new, "open": _open, "save": _save, "save_as": _save_as, "pdf": _pdf,
     "picture_export": _picture_export, "print": _print, "undo": _undo, "redo": _redo,

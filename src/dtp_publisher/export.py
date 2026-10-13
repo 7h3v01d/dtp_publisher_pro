@@ -70,10 +70,57 @@ def render_page(scene: PageScene, painter: QPainter, target: QRectF,
         painter.restore()
 
 
-def export_pdf(doc: Document, path: str, pages: Optional[Iterable[int]] = None) -> int:
+def sheet_jobs(doc: Document, pages: Optional[Iterable[int]] = None):
+    """For label publications: [(paper_w_pt, paper_h_pt, [(cell_rect_pt, page_index)])]."""
+    from . import labels
+    layout = labels.from_dict(doc.sheet)
+    if layout is None:
+        return None
+    idx = list(pages) if pages is not None else list(range(len(doc.pages)))
+    mode = (doc.sheet or {}).get("mode", "copies")
+    cells = labels.cells(layout)
+    jobs = []
+    for assignment in labels.plan(len(idx), layout, mode):
+        jobs.append((mm_to_pt(layout.paper_w), mm_to_pt(layout.paper_h),
+                     [(cells[c], idx[i]) for c, i in enumerate(assignment) if i >= 0]))
+    return jobs
+
+
+def mm_to_pt(v: float) -> float:
+    return v * 72.0 / 25.4
+
+
+def render_sheet(doc: Document, painter: QPainter, dpi: float, cells):
+    k = dpi / 72.0
+    for rect, i in cells:
+        target = QRectF(rect.left() * k, rect.top() * k, rect.width() * k, rect.height() * k)
+        render_page(doc.pages[i], painter, target, keep_aspect=True)
+
+
+def export_pdf(doc: Document, path: str, pages: Optional[Iterable[int]] = None,
+               as_sheets: bool = True) -> int:
+    """Write a PDF.  Label publications are written as printed sheets."""
     idx = list(pages) if pages is not None else list(range(len(doc.pages)))
     if not idx:
         raise ValueError("No pages to export")
+    jobs = sheet_jobs(doc, idx) if as_sheets else None
+    if jobs:
+        w = QPdfWriter(path)
+        w.setResolution(PDF_DPI)
+        w.setCreator(f"{APP_NAME} {__version__}")
+        w.setTitle(doc.title or os.path.splitext(os.path.basename(path))[0])
+        w.setPageLayout(page_layout(jobs[0][0], jobs[0][1]))
+        p = QPainter()
+        if not p.begin(w):
+            raise OSError(f"Cannot write PDF: {path}")
+        try:
+            for n, (_pw, _ph, cells) in enumerate(jobs):
+                if n > 0:
+                    w.newPage()
+                render_sheet(doc, p, w.resolution(), cells)
+        finally:
+            p.end()
+        return len(jobs)
     w = QPdfWriter(path)
     w.setResolution(PDF_DPI)
     w.setCreator(f"{APP_NAME} {__version__}")
@@ -157,6 +204,21 @@ def print_document(doc: Document, printer: QPrinter, pages: Optional[Iterable[in
     idx = list(pages) if pages is not None else list(range(len(doc.pages)))
     if not idx:
         return 0
+    jobs = sheet_jobs(doc, idx)
+    if jobs:
+        printer.setFullPage(True)
+        printer.setPageLayout(page_layout(jobs[0][0], jobs[0][1]))
+        p = QPainter()
+        if not p.begin(printer):
+            raise OSError("Cannot start the printer.")
+        try:
+            for n, (_pw, _ph, cells) in enumerate(jobs):
+                if n > 0:
+                    printer.newPage()
+                render_sheet(doc, p, printer.resolution(), cells)
+        finally:
+            p.end()
+        return len(jobs)
     # remember the printer's margins: full-page mode (needed for exact-size
     # printing from the paper corner) resets them to zero
     margins = printer.pageLayout().margins(QPageLayout.Unit.Point)
