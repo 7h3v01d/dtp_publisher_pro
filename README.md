@@ -10,7 +10,12 @@ Python 3.11+ · PyQt6 · Windows (also runs on Linux/macOS) · Apache 2.0
 
 ## Starting it
 
-Double-click **`runme.bat`**. The first time, it sets itself up (this needs an
+**Easiest (for someone else's PC):** on your own PC run **`build_exe.bat`**
+once. It makes a folder `dist\DTP Publisher\`; copy that whole folder to the
+other computer and double-click **DTP Publisher.exe**. Nothing else needs
+installing (except LibreOffice, only if they open Publisher `.pub` files).
+
+**From the source:** double-click **`runme.bat`**. The first time, it sets itself up (this needs an
 internet connection and takes a minute or two); after that it opens straight
 away.
 
@@ -125,7 +130,9 @@ src/dtp_publisher/
   templates.py      built-in designs (built with the normal item API)
   blocks.py         building blocks (header, footer, coupon, page number…)
   fields.py         automatic page numbers and dates
-  autosave.py       recovery copies written on a worker QThread
+  autosave.py       recovery copies: state captured on the GUI thread, encoded and
+                    written on a worker QThread, stale writes dropped by generation
+  limits.py         every resource limit + the load budget checked before building
   settings.py       per-user JSON preferences
   theme.py          light / dark / high-contrast palettes + QSS
   ui/               main window, ribbon, canvas + rulers, panels, dialogs, icons
@@ -152,7 +159,9 @@ run_tests.bat            (or: python -m pytest -q   with QT_QPA_PLATFORM=offscre
 revert_proofs.bat        (or: python tools/revert_proofs.py)
 ```
 
-About 170 tests run headless in about 15 seconds. The importer tests use
+About 210 tests run headless in about 15 seconds. `tests/test_adversarial_limits.py`
+and `tests/test_autosave_races.py` cover hostile and oversized input and the
+autosave/save races; resource limits are all in `src/dtp_publisher/limits.py`. The importer tests use
 synthetic ODG/WMF data; to also run real Publisher files, point
 `DTP_PUB_SAMPLES` at a folder of `.pub` files (needs LibreOffice). Don't commit
 real `.pub` files — they usually contain names and addresses. `tools/revert_proofs.py`

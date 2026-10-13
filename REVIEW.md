@@ -58,6 +58,38 @@ the whole story and grows each box to fit. The importer groups boxes with
 identical text, links them in reading order (page, column, top), and restores
 Publisher's box height from `fo:min-height`.
 
+## 5.1.1: adversarial review (resource limits and autosave)
+
+Every finding was reproduced against the 5.1.0 code before anything was
+changed. Memory figures are peak resident memory of a fresh process.
+
+| # | Finding | Reproduced on 5.1.0 | Fix | Tests |
+|---|---|---|---|---|
+| A1 | Embedded ODG pictures decompressed with no limit | A 2 MB converted file peaked at **4 GB** and failed with `MemoryError` | Per-picture and whole-file budgets checked from the zip header *and* while streaming; each picture read once | `test_odg_picture_bomb_is_not_decompressed`, `test_odg_total_picture_budget`, `test_odg_repeated_picture_is_read_once` |
+| A2 | Picture files read whole before checking | A 2.6 MB pixel-bomb PNG peaked at **3 GB**; large files were slurped | Size checked before reading; big photos decoded from the file at reduced size; bytes kept only when used as-is | `test_huge_picture_file_is_refused_without_reading_it`, `test_unreadable_big_file_is_not_slurped`, `test_very_large_photo_is_decoded_at_reduced_size` |
+| A3 | Raster export sized only by the page | A 14,400 pt page at 150 dpi peaked at **3.5 GB**; page sizes in files were not clamped | Pixel budget checked before allocating; Save as Picture lowers the dpi and says so; page size, margins, gutter, guides clamped on load | `test_raster_export_budget_is_checked_before_allocating`, `test_page_size_from_file_is_clamped`, `test_save_as_picture_lowers_dpi_instead_of_failing` |
+| A4 | No complexity budget | 100,000 objects in a 30 MB file took **13 s** to open; 20,000 pages opened | `LoadBudget` counts pages, objects (in groups too) and text before any Qt object is made; same for paste | `test_too_many_*`, `test_clipboard_over_budget_pastes_nothing` |
+| A5 | Autosave write racing Save | Holding the writer, then saving: the stale recovery file **reappeared** | Generation numbers; discard makes earlier requests stale under a lock and waits for a write in progress | `tests/test_autosave_races.py` |
+| A6 | Autosave serialised on the GUI thread | 50 × 5 MB photos: **2.4 s** freeze per autosave | JSON encoding moved to the worker; pictures keep their encoded text. Now ~1 ms after the first autosave (the first encodes each new photo once) | measured; docstring corrected |
+| A7 | Qt loosely pinned | `PyQt6>=6.5,<7` | Exact tested versions pinned; Windows wheels verified to exist for Python 3.11 | — |
+| A8 | Bootstrap needs Python + internet | — | PyInstaller build (`build_exe.bat`), checked on Linux | — |
+| A9 | `.bak` failure swallowed | Save reported success; no `.bak` | `write_atomic` returns whether the backup worked; the window warns | `test_backup_failure_is_reported_but_save_succeeds`, `test_window_tells_the_user_when_the_backup_failed` |
+| A10 | Lenient base64 | Junk characters were silently accepted | Strict decode first. **Deviation from the review:** rather than always rejecting, damaged text is retried leniently and kept only if Qt decodes a real picture, with a "please check it" note; otherwise an empty frame and a warning | `test_damaged_picture_text_is_repaired_with_a_warning`, `test_garbage_picture_becomes_empty_frame_with_a_warning` |
+| A11 | 200 MB XML allowance | 50 MB of XML peaked at **1.7 GB** (expat already rejects entity expansion) | 48 MB per XML part and 1.5 M elements, streamed into a counting tree builder. Real converted files: 0.06–0.38 MB | `test_odg_xml_size_and_element_limits`, `test_odg_entity_expansion_is_rejected` |
+| A12 | No output budget for LibreOffice | Only "size > 0" was checked | Converted file and temp folder size-checked (temp folder while it runs) | `test_converted_output_too_large_is_refused` |
+
+Found while doing the above:
+
+- Duplicate ids in a file: whichever box Qt listed last won, so a copied box
+  could take over a linked story (`test_duplicate_uid_cannot_hijack_a_text_link`).
+  Ids are now made unique in file order before anything is built.
+- ODG lengths such as `1e30mm` reached Qt unclamped (`test_odg_absurd_dimensions_do_not_crash`).
+- The first version of `LoadBudget` copied the limits as default arguments at
+  import time — the prototype's grid-size bug again — so the limits could not
+  be changed at run time. Found by its own tests; now read when used.
+
+All of these are in `tools/revert_proofs.py` (32 proofs).
+
 ## Not done yet (candidates for a later version)
 
 - Text wrap around pictures. Imported newsletters can have a photo sitting

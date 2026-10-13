@@ -26,6 +26,7 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import (QBrush, QColor, QFont, QImage, QPainterPath, QTextBlockFormat,
                          QTextCharFormat, QTextCursor, QTextListFormat, QTransform)
 
+from .. import limits
 from ..document import Document
 from ..geometry import Geo, normalize_angle, rotate_vec
 from ..items import BaseItem, GroupItem, ImageItem, PathItem, ShapeItem, TextItem
@@ -44,8 +45,8 @@ NS = {
     "loext": "urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0",
 }
 _REV = {v: k for k, v in NS.items()}
-MAX_XML = 200 * 1024 * 1024
 MAX_DEPTH = 64
+MAX_LENGTH_PT = 100_000.0          # about 35 m: far beyond any page
 
 
 def q(name: str) -> str:
@@ -72,7 +73,9 @@ def length(v: Optional[str]) -> Optional[float]:
     if not m or m.group(2) == "%":
         return None
     x = float(m.group(1)) * _UNIT[m.group(2)]
-    return x if math.isfinite(x) else None
+    if not math.isfinite(x):
+        return None
+    return max(-MAX_LENGTH_PT, min(x, MAX_LENGTH_PT))     # 1e30mm must not reach Qt
 
 
 def percent(v: Optional[str]) -> Optional[float]:
@@ -105,6 +108,18 @@ def color(v: Optional[str]) -> Optional[QColor]:
         return None
     c = QColor(v)
     return c if c.isValid() else None
+
+
+class _CountingBuilder(ET.TreeBuilder):
+    def __init__(self, limit: int):
+        super().__init__()
+        self.limit, self.n = limit, 0
+
+    def start(self, tag, attrs):
+        self.n += 1
+        if self.n > self.limit:
+            raise limits.TooBig("The publication has too many parts to open.")
+        return super().start(tag, attrs)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -207,6 +222,10 @@ class OdgImporter:
     def __init__(self, odg_path: str, report: Optional[ImportReport] = None):
         self.report = report or ImportReport()
         self.zip = zipfile.ZipFile(odg_path)
+        if len(self.zip.infolist()) > limits.MAX_ODG_ENTRIES:
+            raise limits.TooBig("The converted file has too many parts to open.")
+        self._picture_bytes = 0          # uncompressed bytes read so far (budget)
+        self._objects = 0
         self.content = self._xml("content.xml")
         styles_root = self._xml("styles.xml", required=False)
         roots = [r for r in (styles_root, self.content) if r is not None]
@@ -221,9 +240,41 @@ class OdgImporter:
             if required:
                 raise ValueError(f"The converted file has no {name}.")
             return None
-        if info.file_size > MAX_XML:
-            raise ValueError("The converted file is too large.")
-        return ET.fromstring(self.zip.read(name))
+        if info.file_size > limits.MAX_ODG_XML_BYTES:
+            raise limits.TooBig("The publication is too large to open.")
+        # streamed into a counting tree builder, so an element limit stops a runaway
+        # file before the tree gets big; the size is re-checked as bytes arrive
+        parser = ET.XMLParser(target=_CountingBuilder(limits.MAX_XML_ELEMENTS))
+        got = 0
+        with self.zip.open(info) as f:
+            while True:
+                chunk = f.read(1 << 20)
+                if not chunk:
+                    break
+                got += len(chunk)
+                if got > limits.MAX_ODG_XML_BYTES:
+                    raise limits.TooBig("The publication is too large to open.")
+                parser.feed(chunk)
+        return parser.close()
+
+    def _read_member(self, name: str) -> bytes:
+        """Read an embedded file within the per-picture and whole-file budgets."""
+        info = self.zip.getinfo(name)              # KeyError if missing
+        left = limits.MAX_ODG_TOTAL_PICTURE_BYTES - self._picture_bytes
+        cap = min(limits.MAX_ODG_PICTURE_BYTES, left)
+        if info.file_size > cap:
+            raise limits.TooBig(name)
+        out = bytearray()
+        with self.zip.open(info) as f:
+            while True:
+                chunk = f.read(1 << 20)
+                if not chunk:
+                    break
+                out += chunk
+                if len(out) > cap:                 # a header that under-states its size
+                    raise limits.TooBig(name)
+        self._picture_bytes += len(out)
+        return bytes(out)
 
     # ── document ─────────────────────────────────────────────────────────────
     def build(self) -> Document:
@@ -231,6 +282,9 @@ class OdgImporter:
         body = self.content.find(q("office:body"))
         drawing = body.find(q("office:drawing")) if body is not None else None
         pages = list(drawing.iter(q("draw:page"))) if drawing is not None else []
+        if len(pages) > limits.MAX_PAGES:
+            raise limits.TooBig(f"This publication has {len(pages):,} pages; DTP Publisher "
+                                f"can open up to {limits.MAX_PAGES:,}.")
         for i, page in enumerate(pages):
             master = page.get(q("draw:master-page-name"), "")
             layout = self.styles.masters.get(master, ("", None))[0]
@@ -274,6 +328,10 @@ class OdgImporter:
     def _element(self, e: ET.Element, page_idx: int, depth: int) -> Optional[BaseItem]:
         if depth > MAX_DEPTH:
             return None
+        self._objects += 1
+        if self._objects > limits.MAX_OBJECTS:
+            raise limits.TooBig(f"This publication has more than {limits.MAX_OBJECTS:,} "
+                                "objects, which is more than DTP Publisher can safely open.")
         t = short(e.tag)
         try:
             if t == "draw:g":
@@ -284,6 +342,8 @@ class OdgImporter:
                      "draw:ellipse", "draw:circle", "draw:line", "draw:connector",
                      "draw:custom-shape"):
                 return self._shape(e, t)
+        except limits.TooBig:
+            raise
         except (ValueError, TypeError, ZeroDivisionError) as ex:
             self.report.warn(f"Skipped an object that could not be read ({t}: {ex}).")
             return None
@@ -512,9 +572,13 @@ class OdgImporter:
             return self._images[href]
         res = None
         try:
-            raw = self.zip.read(href.lstrip("./"))
+            raw = self._read_member(href.lstrip("./"))
         except KeyError:
             raw = b""
+        except limits.TooBig:
+            raw = b""
+            self.report.warn("Some pictures were too big to open; empty picture frames "
+                             "were left in their place.")
         if raw:
             ext = os.path.splitext(href)[1].lower()
             if ext in (".wmf", ".emf", ".svm") or raw[:4] in (b"\xd7\xcd\xc6\x9a",

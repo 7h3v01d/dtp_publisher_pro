@@ -162,10 +162,20 @@ def render_thumbnail(scene: PageScene, max_w: int, max_h: int) -> QImage:
     return img
 
 
-def render_page_image(scene: PageScene, dpi: float = 150, transparent: bool = False) -> QImage:
+def render_page_image(scene: PageScene, dpi: float = 150, transparent: bool = False,
+                      opaque: bool = False) -> QImage:
+    """Rasterise a page.  Refuses (``limits.TooBig``) rather than allocate gigabytes;
+    callers pick a safe dpi with ``limits.safe_export_dpi`` first."""
+    from . import limits
     wpx = max(1, round(scene.page_w / 72.0 * dpi))
     hpx = max(1, round(scene.page_h / 72.0 * dpi))
-    img = QImage(wpx, hpx, QImage.Format.Format_ARGB32_Premultiplied)
+    if wpx * hpx > limits.MAX_EXPORT_PIXELS or max(wpx, hpx) > limits.MAX_EXPORT_SIDE:
+        raise limits.TooBig(f"A {wpx:,} × {hpx:,} pixel picture is too big to make.")
+    fmt = QImage.Format.Format_RGB32 if opaque and not transparent \
+        else QImage.Format.Format_ARGB32_Premultiplied
+    img = QImage(wpx, hpx, fmt)
+    if img.isNull():
+        raise limits.TooBig("There is not enough memory to make a picture this big.")
     img.fill(QColor(0, 0, 0, 0) if transparent else QColor("white"))
     img.setDotsPerMeterX(round(dpi / 0.0254))
     img.setDotsPerMeterY(round(dpi / 0.0254))
@@ -175,17 +185,24 @@ def render_page_image(scene: PageScene, dpi: float = 150, transparent: bool = Fa
     return img
 
 
+def export_dpi(doc: Document, pages: Optional[Iterable[int]], dpi: float) -> float:
+    """The dpi Save as Picture will really use: lowered for pages that are too big."""
+    from . import limits
+    idx = list(pages) if pages is not None else list(range(len(doc.pages)))
+    return min([limits.safe_export_dpi(doc.pages[i].page_w, doc.pages[i].page_h, dpi)
+                for i in idx] or [dpi])
+
+
 def export_images(doc: Document, folder: str, base: str, fmt: str = "png", dpi: float = 150,
                   pages: Optional[Iterable[int]] = None) -> List[str]:
     idx = list(pages) if pages is not None else list(range(len(doc.pages)))
     out = []
     ext = "jpg" if fmt.lower() in ("jpg", "jpeg") else "png"
+    dpi = export_dpi(doc, idx, dpi)
     for i in idx:
-        img = render_page_image(doc.pages[i], dpi)
+        img = render_page_image(doc.pages[i], dpi, opaque=(ext == "jpg"))
         name = f"{base}.{ext}" if len(idx) == 1 else f"{base}-page{i + 1}.{ext}"
         path = os.path.join(folder, name)
-        if ext == "jpg":
-            img = img.convertToFormat(QImage.Format.Format_RGB32)
         if not img.save(path, "JPG" if ext == "jpg" else "PNG", 92 if ext == "jpg" else -1):
             raise OSError(f"Cannot write {path}")
         out.append(path)

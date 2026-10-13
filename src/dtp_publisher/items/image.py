@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import base64
+import os
 from typing import Any, Dict, Optional, Tuple
 
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QPointF, QRectF, Qt
@@ -31,17 +32,53 @@ def encode_image(img: QImage, prefer: str = "auto", quality: int = 90) -> Tuple[
     return bytes(ba.data()), fmt
 
 
-def _read_upright(raw: bytes) -> Tuple[QImage, bool]:
-    """Decode bytes, applying EXIF orientation (phone photos).  Returns (img, rotated)."""
+def _decode(device, max_px: Optional[int], upright: bool) -> Tuple[QImage, bool, bool]:
+    """Decode from a QIODevice or path.  Returns (img, rotated, scaled).
+
+    The header is read first; pictures bigger than ``max_px`` are decoded at a
+    reduced size where the format allows it (JPEG decodes straight to the
+    smaller size), so a 100-megapixel phone photo never needs 400 MB.  Qt's
+    own allocation limit still guards every decode.
+    """
+    reader = QImageReader(device)
+    reader.setAutoTransform(upright)
+    size = reader.size()
+    scaled = False
+    if max_px and size.isValid() and max(size.width(), size.height()) > max_px:
+        reader.setScaledSize(size.scaled(max_px, max_px, Qt.AspectRatioMode.KeepAspectRatio))
+        scaled = True
+    img = reader.read()
+    rotated = upright and reader.transformation() != QImageIOHandler.Transformation.TransformationNone
+    return img, rotated, scaled and not img.isNull()
+
+
+def _read_upright(raw: bytes, max_px: Optional[int] = None) -> Tuple[QImage, bool, bool]:
+    """Decode bytes, applying EXIF orientation (phone photos)."""
     ba = QByteArray(raw)
     buf = QBuffer(ba)
     buf.open(QIODevice.OpenModeFlag.ReadOnly)
-    reader = QImageReader(buf)
-    reader.setAutoTransform(True)
-    img = reader.read()
-    rotated = reader.transformation() != QImageIOHandler.Transformation.TransformationNone
-    buf.close()
-    return img, rotated
+    try:
+        return _decode(buf, max_px, True)
+    finally:
+        buf.close()
+
+
+def _finish(img: QImage, raw: Optional[bytes], rotated: bool, scaled: bool,
+            max_px: int) -> Optional[Tuple[bytes, str, QImage]]:
+    if img.isNull():
+        return None
+    if max(img.width(), img.height()) > max_px:      # formats without scaled decoding
+        img = img.scaled(max_px, max_px, Qt.AspectRatioMode.KeepAspectRatio,
+                         Qt.TransformationMode.SmoothTransformation)
+        scaled = True
+    if raw is not None and not rotated and not scaled:
+        head = raw[:12]
+        if head.startswith(b"\x89PNG"):
+            return raw, "png", img
+        if head.startswith(b"\xff\xd8"):
+            return raw, "jpg", img
+    data, fmt = encode_image(img)
+    return data, fmt, img
 
 
 def prepare_image_bytes(raw: bytes, max_px: int = MAX_EMBED_PX) -> Optional[Tuple[bytes, str, QImage]]:
@@ -50,30 +87,46 @@ def prepare_image_bytes(raw: bytes, max_px: int = MAX_EMBED_PX) -> Optional[Tupl
     Photos are stored upright (EXIF orientation applied) and no larger than
     ``max_px`` on the long side, so documents stay a sensible size.
     """
-    img, rotated = _read_upright(raw)
+    img, rotated, scaled = _read_upright(raw, max_px)
+    return _finish(img, raw, rotated, scaled, max_px)
+
+
+def image_file_problem(path: str) -> Optional[str]:
+    """Why a picture file can't be used, in words for the user (None if it might)."""
+    from ..limits import MAX_IMAGE_FILE_BYTES, describe_bytes
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return "The file could not be opened."
+    if size > MAX_IMAGE_FILE_BYTES:
+        return (f"The file is {describe_bytes(size)}; pictures up to "
+                f"{describe_bytes(MAX_IMAGE_FILE_BYTES)} can be used.")
+    return None
+
+
+def load_image_file(path: str, max_px: int = MAX_EMBED_PX) -> Optional[Tuple[bytes, str, QImage]]:
+    """Read a picture file without ever holding more than it needs.
+
+    The size is checked before reading, and big pictures are decoded straight
+    from the file at the reduced size; only pictures that are kept as they are
+    have their bytes read in full.
+    """
+    if image_file_problem(path):
+        return None
+    img, rotated, scaled = _decode(path, max_px, True)
     if img.isNull():
         return None
-    head = raw[:12]
-    if max(img.width(), img.height()) > max_px:
-        img = img.scaled(max_px, max_px, Qt.AspectRatioMode.KeepAspectRatio,
-                         Qt.TransformationMode.SmoothTransformation)
-        data, fmt = encode_image(img)
-        return data, fmt, img
-    if not rotated and head.startswith(b"\x89PNG"):
-        return raw, "png", img
-    if not rotated and head.startswith(b"\xff\xd8"):
-        return raw, "jpg", img
-    data, fmt = encode_image(img)
-    return data, fmt, img
-
-
-def load_image_file(path: str) -> Optional[Tuple[bytes, str, QImage]]:
-    try:
-        with open(path, "rb") as f:
-            raw = f.read()
-    except OSError:
-        return None
-    return prepare_image_bytes(raw)
+    raw = None
+    if not rotated and not scaled and max(img.width(), img.height()) <= max_px:
+        from ..limits import MAX_IMAGE_FILE_BYTES
+        try:
+            with open(path, "rb") as f:
+                raw = f.read(MAX_IMAGE_FILE_BYTES + 1)
+        except OSError:
+            return None
+        if len(raw) > MAX_IMAGE_FILE_BYTES:         # it grew since it was checked
+            return None
+    return _finish(img, raw, rotated, scaled, max_px)
 
 
 class ImageItem(BaseItem):
@@ -114,6 +167,7 @@ class ImageItem(BaseItem):
     def set_image_data(self, data: bytes, fmt: str, name: str = "",
                        image: Optional[QImage] = None):
         self.data = bytes(data or b"")
+        self._b64: Optional[str] = None          # cached text form for saving
         self.fmt = fmt or ""
         self.source_name = name or ""
         img = image if image is not None else QImage()
@@ -238,6 +292,14 @@ class ImageItem(BaseItem):
             sc.itemActivated.emit(self)
 
     # ── serialisation ────────────────────────────────────────────────────────
+    def data_b64(self) -> str:
+        """The picture as base64, worked out once (pictures don't change in place)."""
+        if not self.data:
+            return ""
+        if self._b64 is None:
+            self._b64 = base64.b64encode(self.data).decode("ascii")
+        return self._b64
+
     def extra_to_dict(self) -> Dict[str, Any]:
         return {
             "fit_mode": self.fit_mode,
@@ -246,7 +308,7 @@ class ImageItem(BaseItem):
             "corner": self.corner,
             "source_name": self.source_name,
             "format": self.fmt,
-            "data": base64.b64encode(self.data).decode("ascii") if self.data else "",
+            "data": self.data_b64(),
         }
 
     def apply_extra(self, d: Dict[str, Any]):
@@ -257,10 +319,25 @@ class ImageItem(BaseItem):
         self.corner = num(d, "corner", 0.0, 0, 10000)
         raw = d.get("data") or ""
         data = b""
+        repaired = False
+        self._load_notes = []
         if isinstance(raw, str) and raw:
             try:
-                data = base64.b64decode(raw, validate=False)
+                data = base64.b64decode(raw, validate=True)
             except (ValueError, TypeError):
-                data = b""
+                # damaged text: try once more ignoring stray characters, and keep the
+                # result only if it really is a picture (checked below)
+                try:
+                    data = base64.b64decode(raw, validate=False)
+                    repaired = True
+                except (ValueError, TypeError):
+                    data = b""
         fmt = str(d.get("format", ""))[:8]
         self.set_image_data(data, fmt, str(d.get("source_name", ""))[:260])
+        name = self.source_name or "a picture"
+        if raw and self._image.isNull():
+            self.set_image_data(b"", "", self.source_name)
+            self._load_notes.append(f"{name} was damaged and has been left as an empty frame.")
+        elif repaired:
+            self._load_notes.append(f"{name} was slightly damaged in the file and was "
+                                    "repaired; please check it.")

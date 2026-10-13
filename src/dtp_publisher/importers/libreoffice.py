@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 from typing import Callable, List, Optional
 
+from .. import limits
 from .. import settings as settings_mod
 
 
@@ -69,6 +70,20 @@ def find_soffice() -> Optional[str]:
     return None
 
 
+def dir_size(path: str, stop_at: Optional[int] = None) -> int:
+    """Bytes in a folder tree (stops counting once past ``stop_at``)."""
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+            if stop_at is not None and total > stop_at:
+                return total
+    return total
+
+
 def profile_dir() -> str:
     d = os.path.join(settings_mod.config_dir(), "lo-profile")
     os.makedirs(d, exist_ok=True)
@@ -99,7 +114,15 @@ def convert(src: str, fmt: str = "odg", timeout: float = 900.0,
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 creationflags=flags)
         t0 = time.monotonic()
+        next_size_check = t0 + 2.0
         while proc.poll() is None:
+            if time.monotonic() >= next_size_check:      # runaway output fills the disk
+                next_size_check = time.monotonic() + 2.0
+                if dir_size(out_dir, limits.MAX_CONVERT_DIR_BYTES) > limits.MAX_CONVERT_DIR_BYTES:
+                    proc.kill()
+                    proc.wait()
+                    shutil.rmtree(work, ignore_errors=True)
+                    raise ConversionError("The converted publication is too large to open.")
             if cancelled():
                 proc.kill()
                 proc.wait()
@@ -113,6 +136,9 @@ def convert(src: str, fmt: str = "odg", timeout: float = 900.0,
             time.sleep(0.1)
         out = proc.stdout.read().decode("utf-8", "replace") if proc.stdout else ""
         if os.path.isfile(expected) and os.path.getsize(expected) > 0:
+            if os.path.getsize(expected) > limits.MAX_CONVERTED_BYTES:
+                shutil.rmtree(work, ignore_errors=True)
+                raise ConversionError("The converted publication is too large to open.")
             return expected
         last_err = out.strip()[-400:]
     shutil.rmtree(work, ignore_errors=True)

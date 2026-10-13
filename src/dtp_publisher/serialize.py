@@ -19,7 +19,7 @@ from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import QGraphicsItem
 
-from . import __version__
+from . import __version__, limits
 from .document import Document
 from .geometry import rotate_vec
 from .items import ITEM_TYPES, BaseItem, GroupItem
@@ -27,7 +27,7 @@ from .scene import GuideItem, PageScene
 
 FORMAT = "dtpub"
 FORMAT_VERSION = 5
-MAX_FILE_BYTES = 512 * 1024 * 1024
+MAX_FILE_BYTES = limits.MAX_FILE_BYTES
 
 
 class DocumentError(Exception):
@@ -41,7 +41,7 @@ def item_to_dict(it: BaseItem) -> Dict[str, Any]:
 
 def item_from_dict(d: Dict[str, Any], warnings: Optional[List[str]] = None,
                    depth: int = 0) -> Optional[BaseItem]:
-    if not isinstance(d, dict) or depth > 32:
+    if not isinstance(d, dict) or depth > limits.MAX_GROUP_DEPTH:
         return None
     cls = ITEM_TYPES.get(d.get("kind"))
     if cls is None:
@@ -55,6 +55,9 @@ def item_from_dict(d: Dict[str, Any], warnings: Optional[List[str]] = None,
         if warnings is not None:
             warnings.append(f"Skipped a damaged {cls.DISPLAY.lower()}: {ex}")
         return None
+    notes = getattr(it, "_load_notes", None)
+    if notes and warnings is not None:
+        warnings.extend(notes)
     if isinstance(it, GroupItem):
         for cd in d.get("children", []) or []:
             child = item_from_dict(cd, warnings, depth + 1)
@@ -95,7 +98,12 @@ def page_from_dict(doc: Document, d: Dict[str, Any], warnings: List[str]) -> Pag
     sc = doc.make_page(_f(setup.get("width"), 595.0), _f(setup.get("height"), 842.0),
                        str(d.get("name", ""))[:120])
     sc.apply_setup(setup)
-    for g in d.get("guides", []) or []:
+    guides = d.get("guides", []) or []
+    if isinstance(guides, list) and len(guides) > limits.MAX_GUIDES_PER_PAGE:
+        warnings.append(f"Only the first {limits.MAX_GUIDES_PER_PAGE} guides on a page "
+                        "were kept.")
+        guides = guides[:limits.MAX_GUIDES_PER_PAGE]
+    for g in guides if isinstance(guides, list) else []:
         if isinstance(g, dict) and g.get("orient") in ("H", "V"):
             sc.attach_guide(GuideItem(g["orient"], _f(g.get("pos"), 0.0)))
     for idict in d.get("items", []) or []:
@@ -127,6 +135,10 @@ def document_from_dict(data: Dict[str, Any], doc: Optional[Document] = None
             data = migrate_v3(data, warnings)
         else:
             raise DocumentError("This file is not a DTP Publisher document.")
+    try:
+        limits.LoadBudget().check_document(data)    # before any Qt object is made
+    except limits.TooBig as ex:
+        raise DocumentError(str(ex)) from ex
     ver = data.get("version", 0)
     if isinstance(ver, int) and ver > FORMAT_VERSION:
         warnings.append("This file was made by a newer version; some features may be missing.")
@@ -136,26 +148,90 @@ def document_from_dict(data: Dict[str, Any], doc: Optional[Document] = None
     if isinstance(data.get("view"), dict):
         doc.view.update_from(data["view"])
     doc.title = str(data.get("title", ""))[:200]
-    for pd in data.get("pages", []) or []:
+    pages = data.get("pages", []) or []
+    pages = _dedupe_uid_data(pages, warnings) if isinstance(pages, list) else []
+    for pd in pages:
         if isinstance(pd, dict):
             doc.add_page(page_from_dict(doc, pd, warnings))
     if not doc.pages:
         doc.add_page(doc.make_page())
+    _dedupe_uids(doc, warnings)
     from .textflow import resolve_links
     resolve_links(doc.text_items())
     doc.undo_stack.clear()
     return doc, warnings
 
 
-def save_document(doc: Document, path: str, keep_backup: bool = True) -> None:
+def _dedupe_uid_data(pages: list, warnings: List[str]) -> list:
+    """Duplicate uids in the file: the first in *file order* keeps it (text links
+    point at uids, so a later copy must never be able to take a link over).
+    Works on copies; the caller's data is left alone."""
+    from .items.base import new_uid
+    seen: set = set()
+    changed = 0
+
+    def fix(items, depth):
+        nonlocal changed
+        if not isinstance(items, list) or depth > limits.MAX_GROUP_DEPTH:
+            return items
+        out = []
+        for d in items:
+            if isinstance(d, dict):
+                d = dict(d)
+                uid = d.get("uid")
+                if isinstance(uid, str) and uid:
+                    if uid in seen:
+                        d["uid"] = new_uid()
+                        changed += 1
+                    seen.add(d["uid"])
+                if "children" in d:
+                    d["children"] = fix(d["children"], depth + 1)
+            out.append(d)
+        return out
+    res = [dict(pd, items=fix(pd["items"], 0)) if isinstance(pd, dict) and "items" in pd else pd
+           for pd in pages]
+    if changed:
+        warnings.append(f"{changed} object(s) had a duplicate id and were given a new one.")
+    return res
+
+
+def _dedupe_uids(doc: Document, warnings: List[str]) -> None:
+    """Every object needs its own uid (text links refer to them); the first keeps it."""
+    from .items.base import new_uid
+    seen = set()
+    changed = 0
+
+    def walk(it):
+        nonlocal changed
+        if it.uid in seen or not it.uid:
+            it.uid = new_uid()
+            changed += 1
+        seen.add(it.uid)
+        if isinstance(it, GroupItem):
+            for m in it.members():
+                walk(m)
+    for sc in doc.pages:
+        for it in sc.top_items():
+            walk(it)
+    if changed:
+        warnings.append(f"{changed} object(s) had a duplicate id and were given a new one.")
+
+
+def save_document(doc: Document, path: str, keep_backup: bool = True) -> bool:
+    """Save; returns False when the save worked but the .bak copy could not be made."""
     data = document_to_dict(doc)
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    write_atomic(path, text.encode("utf-8"), keep_backup)
+    backup_ok = write_atomic(path, text.encode("utf-8"), keep_backup)
     doc.path = path
     doc.mark_saved()
+    return backup_ok
 
 
-def write_atomic(path: str, payload: bytes, keep_backup: bool = True) -> None:
+def write_atomic(path: str, payload: bytes, keep_backup: bool = True) -> bool:
+    """Write ``payload`` to ``path`` atomically.  Raises OSError if the file could not
+    be written.  Returns False when it was written but the previous version could not
+    be kept as ``.bak`` (the save itself must not fail over that)."""
+    backup_ok = True
     folder = os.path.dirname(os.path.abspath(path)) or "."
     tmp = os.path.join(folder, f".{os.path.basename(path)}.{os.getpid()}.tmp")
     try:
@@ -167,7 +243,7 @@ def write_atomic(path: str, payload: bytes, keep_backup: bool = True) -> None:
             try:
                 shutil.copy2(path, path + ".bak")
             except OSError:
-                pass
+                backup_ok = False
         os.replace(tmp, path)
     finally:
         if os.path.exists(tmp):
@@ -175,6 +251,7 @@ def write_atomic(path: str, payload: bytes, keep_backup: bool = True) -> None:
                 os.remove(tmp)
             except OSError:
                 pass
+    return backup_ok
 
 
 def read_json_file(path: str) -> Dict[str, Any]:
@@ -324,9 +401,15 @@ def items_to_clip(items: List[BaseItem]) -> bytes:
 
 
 def items_from_clip(raw: bytes) -> List[BaseItem]:
+    if len(raw) > MAX_FILE_BYTES:
+        return []
     try:
         data = json.loads(bytes(raw).decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
+        return []
+    try:
+        limits.LoadBudget().check_items(data.get("items") if isinstance(data, dict) else None)
+    except limits.TooBig:
         return []
     out = []
     for d in data.get("items", []) if isinstance(data, dict) else []:

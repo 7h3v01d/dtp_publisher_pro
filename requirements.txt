@@ -1,1 +1,6 @@
-PyQt6>=6.5,<7
+# Exact versions the program is tested with (layout, fonts, PDF and printing all
+# come from Qt, so a different Qt can move text).  See requirements-range.txt
+# for the wider range it is expected to work with.
+PyQt6==6.11.0
+PyQt6-Qt6==6.11.2
+PyQt6-sip==13.13.0

@@ -1,0 +1,3 @@
+# Developer compatibility range (not used by runme.bat, which installs the
+# tested versions in requirements.txt).
+PyQt6>=6.5,<7

@@ -1,5 +1,50 @@
 # Changelog
 
+## 5.1.1 — 2026-10-14 (hardening)
+
+A defensive release after an adversarial review. No new features; every
+finding was reproduced against the 5.1.0 code first (see `REVIEW.md`), and
+each fix has a regression test and a revert proof.
+
+### Fixed
+- **Oversized input no longer exhausts memory.** All limits live in one place
+  (`limits.py`) and are far above any real publication:
+  - Publisher import: each embedded picture and all pictures together are
+    checked before being decompressed; the XML is streamed with size and
+    element limits; the converted file and LibreOffice's temp folder are
+    size-checked; absurd lengths (`1e30mm`) are clamped.
+  - Picture files are size-checked before reading, and very large photos are
+    decoded straight from the file at reduced size.
+  - Page sizes, margins, gutters and guides read from a file are clamped.
+  - *Save as Picture* never asks for a bitmap above 150 megapixels; the
+    resolution is lowered automatically and you are told.
+  - Opening a file counts its pages, objects and text *before* any object is
+    made, and refuses files beyond the limits with a plain explanation.
+    Pasting is held to the same budget.
+- **Autosave could bring back an out-of-date recovery file** if Save happened
+  while an autosave was queued or being written. Autosave requests now carry a
+  generation number; Save/close makes older ones stale and waits for a write
+  in progress.
+- **Autosave no longer stalls typing**: JSON encoding and writing happen on the
+  worker thread, and pictures keep their encoded form, so after the first
+  autosave the GUI-thread part takes about a millisecond even with 50 large
+  photos (it was about 2 seconds).
+- **A failed `.bak` copy is reported.** The save still succeeds, but you are
+  told the backup could not be updated.
+- **Damaged picture data** is decoded strictly; slightly damaged data is
+  repaired only if the result is a real picture (with a note), and anything
+  else becomes an empty frame with a warning.
+- **Duplicate object ids in a file** are renumbered in file order, so a copied
+  box can never take over a linked story.
+
+### Installing
+- `requirements.txt` now pins the exact PyQt6 / Qt versions the program is
+  tested with (text layout, PDF and printing all come from Qt);
+  `requirements-range.txt` keeps the wider developer range. `runme.bat` no
+  longer upgrades pip on first run.
+- `build_exe.bat` makes a stand-alone Windows program (PyInstaller) in
+  `dist\DTP Publisher\` that runs without Python installed.
+
 ## 5.1.0 — 2026-10-14
 
 ### New

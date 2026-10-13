@@ -29,7 +29,7 @@ from ..fields import refresh_fields
 from ..geometry import Geo, normalize_angle
 from ..items import (BaseItem, GroupItem, ImageItem, ShapeItem, TableItem, TextItem,
                      WordArtItem)
-from ..items.image import encode_image, load_image_file, prepare_image_bytes
+from ..items.image import encode_image, image_file_problem, load_image_file, prepare_image_bytes
 from ..items.shape import SHAPES
 from ..scene import PageScene
 from ..serialize import (CLIP_MIME, DocumentError, clone_item, fresh_uids, item_from_dict,
@@ -1034,7 +1034,9 @@ class MainWindow(QMainWindow):
         self.settings.last_folder = os.path.dirname(path)
         res = load_image_file(path)
         if res is None:
-            QMessageBox.warning(self, "Picture", "Sorry, that picture could not be opened.")
+            why = image_file_problem(path) or ("It may be damaged, in a format that isn't "
+                                               "supported, or too big to open.")
+            QMessageBox.warning(self, "Picture", f"Sorry, that picture could not be opened.\n\n{why}")
             return None
         return (*res, os.path.basename(path))
 
@@ -1246,9 +1248,12 @@ class MainWindow(QMainWindow):
                 break
             if isinstance(it, BaseItem) and not isinstance(it, GroupItem):
                 break
+        failed = []
         for n, p in enumerate(paths):
             res = load_image_file(p)
             if res is None:
+                failed.append(f"{os.path.basename(p)}: "
+                              + (image_file_problem(p) or "could not be read"))
                 continue
             data, fmt, img = res
             if target is not None and n == 0:
@@ -1258,6 +1263,9 @@ class MainWindow(QMainWindow):
             else:
                 self._add_picture(data, fmt, img, os.path.basename(p),
                                   at + QPointF(mm(8) * n, mm(8) * n))
+        if failed:
+            QMessageBox.warning(self, "Pictures", "Some pictures could not be added:\n\n"
+                                + "\n".join(failed[:10]))
 
     # ═══════════════════════════════════════════════════════════════════════
     # arrange
@@ -1814,7 +1822,7 @@ class MainWindow(QMainWindow):
         self._end_edits()
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            save_document(self.doc, path, keep_backup=self.settings.keep_backup)
+            backup_ok = save_document(self.doc, path, keep_backup=self.settings.keep_backup)
         except OSError as ex:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Save", f"Sorry, the publication could not be saved:\n{ex}")
@@ -1826,6 +1834,12 @@ class MainWindow(QMainWindow):
         self.settings.save()
         self._update_title()
         self.statusBar().showMessage(f"Saved {os.path.basename(path)}", 4000)
+        if not backup_ok:
+            QMessageBox.warning(
+                self, "Save",
+                f"{os.path.basename(path)} was saved.\n\nThe backup copy of the previous "
+                f"version ({os.path.basename(path)}.bak) could not be updated — the folder "
+                "may be read-only or the backup file may be open in another program.")
         return True
 
     def _default_export_name(self, ext: str) -> str:
@@ -1872,11 +1886,24 @@ class MainWindow(QMainWindow):
         base = os.path.splitext(os.path.basename(path))[0]
         pages = None if dlg.rb_all.isChecked() else [self.page_index()]
         refresh_fields(self.doc)
+        from ..export import export_dpi
+        from ..limits import TooBig
+        want = dlg.dpi.currentData()
+        got = export_dpi(self.doc, pages, want)
+        if got < want:
+            r = QMessageBox.question(
+                self, "Save as picture",
+                f"This page is too big to save as a picture at {want:g} dots per inch. "
+                f"It can be saved at {got:g} dots per inch instead.\n\n"
+                "For printing big posters, Save as PDF keeps full quality.\n\nContinue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if r != QMessageBox.StandardButton.Yes:
+                return
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             out = export_images(self.doc, os.path.dirname(path), base, dlg.fmt.currentData(),
-                                dlg.dpi.currentData(), pages)
-        except OSError as ex:
+                                want, pages)
+        except (OSError, TooBig) as ex:
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(self, "Save as picture", str(ex))
             return

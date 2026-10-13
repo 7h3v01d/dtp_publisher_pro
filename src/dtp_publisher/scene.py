@@ -11,7 +11,7 @@ from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPainterPathStroker, QPen
 from PyQt6.QtWidgets import QGraphicsItem, QGraphicsObject, QGraphicsScene
 
-from . import theme
+from . import limits, theme
 from .commands import MoveGuideCmd, MoveItemsCmd, RemoveGuideCmd
 from .units import mm
 
@@ -148,8 +148,8 @@ class PageScene(QGraphicsScene):
         super().__init__(doc)
         self.doc = doc
         self.name = ""
-        self.page_w = float(width)
-        self.page_h = float(height)
+        self.page_w = limits.page_dim(width, 595.0)
+        self.page_h = limits.page_dim(height, 842.0)
         self.margins = [mm(12.7)] * 4          # left, top, right, bottom
         self.columns = 1
         self.rows = 1
@@ -216,15 +216,18 @@ class PageScene(QGraphicsScene):
         }
 
     def apply_setup(self, st: dict):
-        self.page_w = max(18.0, float(st.get("width", self.page_w)))
-        self.page_h = max(18.0, float(st.get("height", self.page_h)))
+        # values may come from a file: finite and inside the limits, whatever they say
+        self.page_w = limits.page_dim(st.get("width", self.page_w), self.page_w)
+        self.page_h = limits.page_dim(st.get("height", self.page_h), self.page_h)
         m = st.get("margins", self.margins)
         if isinstance(m, (int, float)):
             m = [m] * 4
-        self.margins = [max(0.0, float(v)) for v in list(m)[:4]] + [0.0] * (4 - len(list(m)[:4]))
-        self.columns = max(1, min(24, int(st.get("columns", self.columns))))
-        self.rows = max(1, min(60, int(st.get("rows", self.rows))))
-        self.gutter = max(0.0, float(st.get("gutter", self.gutter)))
+        m = list(m)[:4] if isinstance(m, (list, tuple)) else []
+        half = min(self.page_w, self.page_h) / 2
+        self.margins = [limits.clamp(v, 0.0, half, 0.0) for v in m] + [0.0] * (4 - len(m))
+        self.columns = int(limits.clamp(st.get("columns", self.columns), 1, 24, 1))
+        self.rows = int(limits.clamp(st.get("rows", self.rows), 1, 60, 1))
+        self.gutter = limits.clamp(st.get("gutter", self.gutter), 0.0, half, 0.0)
         bg = QColor(st.get("background", self.background.name(QColor.NameFormat.HexArgb)))
         self.background = bg if bg.isValid() else QColor("white")
         self._update_rect()
