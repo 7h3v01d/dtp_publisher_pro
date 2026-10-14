@@ -10,8 +10,11 @@ if not exist ".venv-build\Scripts\python.exe" (
 ".venv-build\Scripts\python.exe" -m pip install -q -r requirements.txt pyinstaller==6.22.3 || goto :failed
 ".venv-build\Scripts\python.exe" packaging\make_icon.py || goto :failed
 ".venv-build\Scripts\python.exe" -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging\dtp_publisher.spec || goto :failed
+rem the printable manual goes next to the program, where it's easy to find
+copy /y "User Manual.pdf" "dist\DTP Publisher\" >nul || goto :failed
 echo.
 echo Done: dist\DTP Publisher\DTP Publisher.exe
+echo       dist\DTP Publisher\User Manual.pdf
 pause
 exit /b 0
 

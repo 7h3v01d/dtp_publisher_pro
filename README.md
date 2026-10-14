@@ -39,6 +39,12 @@ Windows 11, straight at DTP Publisher Pro's page): pick DTP Publisher Pro for
 `.pub` there. If the program folder is moved later, the next time it starts it
 points Windows at the new place by itself.
 
+## User manual
+
+The full manual, with pictures, opens from **File ▸ User Manual** or **F1**,
+and is also **User Manual.pdf** next to the program, ready to print. The quick
+guide below is the short version.
+
 ## Quick guide
 
 **Making something new.** The start screen shows ready-made designs. Pick one
@@ -186,7 +192,7 @@ run_tests.bat            (or: python -m pytest -q   with QT_QPA_PLATFORM=offscre
 revert_proofs.bat        (or: python tools/revert_proofs.py)
 ```
 
-About 670 tests (including 400 random wrap layouts) run headless in about 25 seconds. `python tools/benchmark.py`
+About 720 tests (including 400 random wrap layouts) run headless in about 25 seconds. `python tools/benchmark.py`
 measures a large ordinary publication (100 pages, 150 photos). `tests/test_adversarial_limits.py`
 and `tests/test_autosave_races.py` cover hostile and oversized input and the
 autosave/save races; resource limits are all in `src/dtp_publisher/limits.py`. The importer tests use
@@ -195,6 +201,16 @@ synthetic ODG/WMF data; to also run real Publisher files, point
 real `.pub` files — they usually contain names and addresses. `tools/revert_proofs.py`
 re-introduces each fixed bug in a temporary copy of `src/` and checks that its
 regression test fails (see `REVIEW.md`).
+
+### The user manual
+
+`src/dtp_publisher/help/manual.html` (with `help/img/`) is the manual; `User Manual.pdf`
+is printed from it. After changing the program's look, run
+`python tools/manual_screens.py` to retake the screenshots (off-screen, with
+made-up sample photos), then `python tools/build_manual_pdf.py` (needs
+`pip install playwright` and `python -m playwright install chromium`).
+`tests/test_manual.py` fails if the manual names a button or shortcut the
+program doesn't have, or if it is for an older version.
 
 ### File format
 

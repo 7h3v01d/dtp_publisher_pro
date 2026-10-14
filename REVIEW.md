@@ -129,7 +129,7 @@ album makes a 323 MB PDF in 47 s); downsampling to 300 dpi would make them
 smaller and faster. Loaded pictures keep both their bytes and their base64
 text (about 1.8 × the photo data) so autosave never re-encodes them.
 
-All of these are in `tools/revert_proofs.py` (49 proofs at 5.1.2; 64 at 5.2; 66 at 5.2.1; 76 at 5.2.2; 82 at 5.2.3; 87 at 5.3).
+All of these are in `tools/revert_proofs.py` (49 proofs at 5.1.2; 64 at 5.2; 66 at 5.2.1; 76 at 5.2.2; 82 at 5.2.3; 87 at 5.3; 90 at 5.3.1).
 
 ## 5.2: text wrap, a layout of our own
 

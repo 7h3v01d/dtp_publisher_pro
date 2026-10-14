@@ -1,5 +1,29 @@
 # Changelog
 
+## 5.3.1 — 2026-10-14 (user manual)
+
+### Added
+- **A user manual**, with pictures of the real program: opens from
+  **File ▸ User Manual** or **F1** (in the web browser, no internet needed), and
+  as **User Manual.pdf** next to the program for printing (`build_exe.bat`
+  copies it there). It covers every part of the program, step by step for
+  flyers, newsletters, cards, labels and albums, plus a "when something goes
+  wrong" chapter.
+- Tests keep the manual true to the program: every "Tab ▸ Button" it names
+  must be on that tab, every shortcut it lists must exist, every picture must
+  be present, and the manual must state the current version.
+- Developer tools: `tools/manual_screens.py` retakes the screenshots;
+  `tools/build_manual_pdf.py` prints the PDF.
+
+### Fixed
+- The Pages panel's buttons were cut off ("Ad...ge") in a window less than
+  about 1,450 pixels wide; they now sit one above the other.
+- In the WordArt window, the *White outline* quick style was white text on a
+  white button, and *Classic black* disappeared on the dark theme; the style
+  buttons now always show on white, like the preview.
+- `build_exe.bat` and `runme.bat` now have Windows line endings (cmd can
+  misread `goto` labels in files without them).
+
 ## 5.3.0 — 2026-10-14 (double-click to open)
 
 ### Added
