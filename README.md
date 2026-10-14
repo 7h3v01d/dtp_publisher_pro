@@ -25,6 +25,20 @@ tick **"Add python.exe to PATH"** during setup.
 You can also open a publication directly: drag a `.dtpub` file onto
 `runme.bat`, or run `python run.py myfile.dtpub`.
 
+**Double-click to open (Windows 10 and 11).** In **File ▸ Preferences**, under
+*Double-click to open*, tick *DTP Publisher publications (.dtpub)* and/or
+*Microsoft Publisher files (.pub)* and press OK. From then on, double-clicking
+those files in File Explorer opens them here. It's set up for your Windows
+account only and needs no administrator password; untick to undo it, and
+whatever program opened them before is put back.
+
+Windows doesn't let a program take over a file type that someone has already
+chosen a program for - often the case for `.pub`. The program then says so and
+offers **Choose in Windows Settings…**, which opens Settings ▸ Default apps (on
+Windows 11, straight at DTP Publisher Pro's page): pick DTP Publisher Pro for
+`.pub` there. If the program folder is moved later, the next time it starts it
+points Windows at the new place by itself.
+
 ## Quick guide
 
 **Making something new.** The start screen shows ready-made designs. Pick one

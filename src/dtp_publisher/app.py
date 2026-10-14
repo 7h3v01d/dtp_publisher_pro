@@ -126,4 +126,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                 s.save()
 
     QTimer.singleShot(50, startup)
+    QTimer.singleShot(2000, _repair_file_types)
     return app.exec()
+
+
+def _repair_file_types():
+    """If double-click was set up and the program folder has since moved,
+    point Windows at this copy (only for the types the user chose)."""
+    from . import winassoc
+    try:
+        winassoc.repair()
+    except Exception:                   # never stop the program over this
+        pass

@@ -10,10 +10,10 @@ from typing import List, Optional
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-                             QFormLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
-                             QPushButton, QRadioButton, QSpinBox, QVBoxLayout)
+                             QFormLayout, QGroupBox, QHBoxLayout, QLabel, QListWidget,
+                             QListWidgetItem, QPushButton, QRadioButton, QSpinBox, QVBoxLayout)
 
-from ... import APP_NAME, __version__
+from ... import APP_NAME, __version__, winassoc
 from ...settings import UI_SCALES, Settings
 from ...theme import THEMES
 from ...units import UNIT_LABELS
@@ -21,8 +21,9 @@ from ..widgets import UnitSpin, hint_label
 
 
 class PreferencesDialog(QDialog):
-    def __init__(self, s: Settings, parent=None):
+    def __init__(self, s: Settings, parent=None, assoc_registry=None):
         super().__init__(parent)
+        self._assoc_registry = assoc_registry
         self.setWindowTitle("Preferences")
         v = QVBoxLayout(self)
         f = QFormLayout()
@@ -55,11 +56,48 @@ class PreferencesDialog(QDialog):
         self.start.setChecked(s.show_start)
         f.addRow(self.start)
         v.addLayout(f)
+        self.assoc = {}
+        if winassoc.supported() or assoc_registry is not None:
+            v.addWidget(self._assoc_group())
         bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
                               | QDialogButtonBox.StandardButton.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         v.addWidget(bb)
+
+    def _assoc_group(self) -> QGroupBox:
+        """Windows: which files open in this program when double-clicked."""
+        g = QGroupBox("Double-click to open")
+        lay = QVBoxLayout(g)
+        lay.addWidget(QLabel("Open these files with DTP Publisher when they are "
+                             "double-clicked in File Explorer:"))
+        notes = []
+        for ext, t in winassoc.TYPES.items():
+            st = winassoc.status(ext, self._assoc_registry)
+            cb = QCheckBox(t["choice"])
+            cb.setChecked(st.registered)
+            self.assoc[ext] = cb
+            lay.addWidget(cb)
+            if st.needs_confirming:
+                notes.append(ext)
+        self.assoc_note = hint_label(
+            "Windows is still opening " + " and ".join(notes) + " files with another program. "
+            "Click the button below and choose DTP Publisher Pro." if notes else
+            "Windows may ask you once which program to use - choose DTP Publisher Pro.")
+        lay.addWidget(self.assoc_note)
+        self.btn_default_apps = QPushButton("Choose in Windows Settings…")
+        self.btn_default_apps.clicked.connect(winassoc.open_default_apps_settings)
+        row = QHBoxLayout()
+        row.addWidget(self.btn_default_apps)
+        row.addStretch(1)
+        lay.addLayout(row)
+        return g
+
+    def assoc_wanted(self) -> Optional[List[str]]:
+        """The file types ticked, or None if this section isn't shown."""
+        if not self.assoc:
+            return None
+        return [e for e, cb in self.assoc.items() if cb.isChecked()]
 
     def apply_to(self, s: Settings):
         s.theme = self.theme.currentData()

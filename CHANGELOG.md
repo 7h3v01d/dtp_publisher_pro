@@ -1,5 +1,21 @@
 # Changelog
 
+## 5.3.0 — 2026-10-14 (double-click to open)
+
+### Added
+- **Open `.dtpub` and `.pub` files by double-clicking them** (Windows 10/11).
+  *File ▸ Preferences ▸ Double-click to open* has a tick box for each. It is
+  set for the current Windows account only (no administrator rights), adds
+  the program to Settings ▸ Default apps, and removing it puts back whatever
+  program opened those files before.
+- Where Windows insists the user confirm it (a program was already chosen for
+  that file type, as is common for `.pub`), the program says so and opens
+  Settings ▸ Default apps; on Windows 11, at DTP Publisher Pro's own page. It
+  never forges that choice itself.
+- If the program folder is moved or deleted, the next start points the file
+  types at the copy that's running. A different copy that still exists (for
+  example one run from the source) is left alone.
+
 ## 5.2.3 — 2026-10-14 (pasted-text hardening, fourth review)
 
 ### Fixed

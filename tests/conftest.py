@@ -59,3 +59,14 @@ def window(qapp, _isolated_home):
     from PyQt6.QtCore import QEvent
     qapp.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
     qapp.processEvents()
+
+
+@pytest.fixture(autouse=True)
+def fake_registry(monkeypatch):
+    """No test may touch the real Windows registry (file associations)."""
+    from fake_registry import FakeRegistry
+
+    from dtp_publisher import winassoc
+    fake = FakeRegistry()
+    monkeypatch.setattr(winassoc, "_default_registry", lambda: fake)
+    return fake

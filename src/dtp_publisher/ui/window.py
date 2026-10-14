@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (QApplication, QCheckBox, QFileDialog, QHBoxLayout, 
                              QLabel, QMainWindow, QMenu, QMessageBox, QSlider, QStatusBar,
                              QTabWidget, QToolButton, QVBoxLayout, QWidget)
 
-from .. import APP_NAME, FILE_EXT, __version__, blocks, theme
+from .. import APP_NAME, FILE_EXT, __version__, blocks, theme, winassoc
 from .. import settings as settings_mod
 from ..autosave import Autosaver
 from ..commands import (AddItemsCmd, AddPageCmd, DeleteItemsCmd, GeometryCmd, GroupCmd,
@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
         self._copy_scene: Optional[PageScene] = None
         self._link_from: Optional[TextItem] = None
         self._pub_source: Optional[str] = None
+        self.assoc_registry = None          # Windows registry (tests put a fake here)
         self.setWindowIcon(icon("wordart", 64))
         self.resize(1500, 950)
         self.setAcceptDrops(False)
@@ -1998,12 +1999,13 @@ class MainWindow(QMainWindow):
     def preferences(self):
         s = self.settings
         old_scale, old_units = s.ui_scale, s.units
-        dlg = PreferencesDialog(s, self)
+        dlg = PreferencesDialog(s, self, assoc_registry=self.assoc_registry)
         if not dlg.exec():
             return
         dlg.apply_to(s)
         s.sanitize()
         s.save()
+        self._apply_file_types(dlg.assoc_wanted())
         self.set_theme(s.theme)
         self.autosaver.set_interval(s.autosave_minutes)
         if s.units != old_units:
@@ -2011,6 +2013,33 @@ class MainWindow(QMainWindow):
         if abs(s.ui_scale - old_scale) > 1e-6:
             QMessageBox.information(self, "Preferences", "The new button and text size will be "
                                     "used the next time you start the program.")
+
+    def _apply_file_types(self, wanted):
+        """Windows file associations, from the Preferences check boxes."""
+        if wanted is None:
+            return
+        reg = self.assoc_registry
+        if sorted(wanted) == sorted(winassoc.registered_types(reg)) and \
+                not any(winassoc.status(e, reg).stale for e in wanted):
+            return
+        try:
+            result = winassoc.apply(wanted, reg)
+        except OSError as ex:
+            QMessageBox.warning(self, "Preferences", f"Windows didn't accept the change:\n{ex}")
+            return
+        waiting = [st.ext for st in result if st.needs_confirming]
+        if waiting:
+            ans = QMessageBox.question(
+                self, "Double-click to open",
+                "DTP Publisher Pro is set up to open " + " and ".join(waiting) + " files.\n\n"
+                "Windows asks you to confirm this yourself, because another program was "
+                "chosen for them before. Open Windows Settings now and choose "
+                "DTP Publisher Pro?")
+            if ans == QMessageBox.StandardButton.Yes:
+                winassoc.open_default_apps_settings()
+        elif wanted:
+            self.statusBar().showMessage("Double-clicked files now open in DTP Publisher Pro",
+                                         5000)
 
     def set_theme(self, name: str):
         theme.apply(QApplication.instance(), name)
