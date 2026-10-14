@@ -8,6 +8,8 @@ Python 3.11+ · PyQt6 · Windows (also runs on Linux/macOS) · Apache 2.0
 
 ---
 
+<img width="1920" height="1040" alt="screenshot" src="screenshot.png" />
+
 ## Starting it
 
 **Easiest (for someone else's PC):** on your own PC run **`build_exe.bat`**
