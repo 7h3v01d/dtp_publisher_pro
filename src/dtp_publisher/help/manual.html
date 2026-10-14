@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DTP Publisher Pro User Manual</title>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 Leon Priest (GitHub: 7h3v01d) -->
+<style>
+:root {
+  --ink: #1d2327;
+  --soft: #4a555c;
+  --paper: #ffffff;
+  --tint: #f3f6f5;
+  --line: #d5dddb;
+  --accent: #0a6e60;
+  --accent-tint: #e3f2ef;
+  --warm: #c2410c;
+  --warm-tint: #fff3eb;
+  --kbd: #f4f4f2;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #e7ecea; --soft: #aeb9b6; --paper: #171b1d; --tint: #20262a; --line: #34403f;
+    --accent: #5cc8b4; --accent-tint: #1d3532; --warm: #ff9a5c; --warm-tint: #3a2618;
+    --kbd: #2a3134;
+  }
+}
+* { box-sizing: border-box; }
+html { font-size: 19px; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: "Segoe UI", Calibri, Carlito, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+}
+.wrap { display: grid; grid-template-columns: 300px minmax(0, 1fr); max-width: 1320px; margin: 0 auto; }
+nav.toc {
+  position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+  padding: 28px 18px 40px 24px; border-right: 1px solid var(--line); font-size: 0.85rem;
+}
+nav.toc h2 { font-size: 1rem; margin: 0 0 10px; color: var(--soft); text-transform: uppercase; letter-spacing: .06em; }
+nav.toc ol { margin: 0; padding-left: 1.3em; }
+nav.toc li { margin: 4px 0; }
+nav.toc a { color: var(--ink); text-decoration: none; }
+nav.toc a:hover { color: var(--accent); text-decoration: underline; }
+main { padding: 32px 48px 80px; min-width: 0; overflow-wrap: anywhere; }
+.cover { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 12px; }
+.cover .kicker { color: var(--accent); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: .8rem; }
+h1 { font-size: 2.4rem; line-height: 1.15; margin: 8px 0 12px; }
+.cover p.lead { font-size: 1.15rem; color: var(--soft); max-width: 46em; margin: 0; }
+h2 { font-size: 1.65rem; margin: 56px 0 8px; padding-top: 12px; border-top: 3px solid var(--accent); }
+h2 .num { color: var(--accent); margin-right: .35em; }
+h3 { font-size: 1.2rem; margin: 30px 0 6px; }
+p, li { max-width: 46em; }
+a { color: var(--accent); }
+.path { font-weight: 700; white-space: nowrap; }
+kbd {
+  font-family: inherit; font-size: .88em; font-weight: 600; background: var(--kbd);
+  border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 6px; padding: 1px 7px; white-space: nowrap;
+}
+figure { margin: 18px 0 24px; }
+figure img { max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; display: block; }
+figure.narrow img { max-width: min(100%, 560px); }
+figure.mid img { max-width: min(100%, 760px); }
+figcaption { color: var(--soft); font-size: .85rem; margin-top: 6px; }
+ol.steps { counter-reset: step; list-style: none; padding-left: 0; }
+ol.steps > li { counter-increment: step; position: relative; padding-left: 2.6em; margin: 12px 0; }
+ol.steps > li::before {
+  content: counter(step); position: absolute; left: 0; top: 0; width: 1.8em; height: 1.8em;
+  border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; text-align: center; line-height: 1.8em;
+}
+ol.callouts > li::marker { color: var(--warm); font-weight: 800; }
+.tip, .note {
+  border-left: 5px solid var(--accent); background: var(--accent-tint); padding: 12px 18px;
+  border-radius: 0 8px 8px 0; margin: 18px 0; max-width: 46em;
+}
+.note { border-left-color: var(--warm); background: var(--warm-tint); }
+.tip b:first-child, .note b:first-child { display: block; margin-bottom: 2px; }
+table { border-collapse: collapse; margin: 14px 0 22px; width: 100%; max-width: 50em; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+th { background: var(--tint); font-size: .9rem; }
+.qa h3 { font-size: 1.08rem; }
+.backtop { font-size: .8rem; }
+.print-toc { display: none; }
+@media (max-width: 900px) {
+  .wrap { display: block; }
+  nav.toc { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 20px 16px; }
+  main { padding: 20px 16px 60px; }
+  html { font-size: 17px; }
+  h1 { font-size: 1.9rem; }
+  table { display: block; overflow-x: auto; }
+}
+@media print {
+  @page { size: A4; margin: 16mm 15mm 18mm; }
+  html { font-size: 12.5pt; }
+  :root { --paper: #fff; --ink: #000; }
+  .wrap { display: block; }
+  nav.toc { display: none; }
+  .print-toc { display: block; page-break-after: always; font-size: 14pt; }
+  .print-toc h2.plain { border: 0; page-break-before: avoid; font-size: 20pt; }
+  .print-toc li { margin: 8px 0; }
+  .print-toc a { text-decoration: none; }
+  main { padding: 0; }
+  .cover { page-break-after: always; border: 0; padding-top: 70mm; }
+  h1 { font-size: 30pt; }
+  h2 { page-break-before: always; margin-top: 0; }
+  h3, figure, .tip, .note, table, tr { page-break-inside: avoid; }
+  h3 { page-break-after: avoid; }
+  a { color: inherit; text-decoration: none; }
+  .backtop { display: none; }
+  figure.narrow img { max-width: 105mm; }
+  figure.mid img { max-width: 140mm; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc" aria-label="Contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#start">Getting started</a></li>
+    <li><a href="#first">Your first flyer, step by step</a></li>
+    <li><a href="#text">Words and text boxes</a></li>
+    <li><a href="#pictures">Pictures and photos</a></li>
+    <li><a href="#shapes">Shapes, WordArt, tables and building blocks</a></li>
+    <li><a href="#arrange">Moving, sizing and lining things up</a></li>
+    <li><a href="#pages">Pages and page setup</a></li>
+    <li><a href="#projects">Newsletters, cards, labels and albums</a></li>
+    <li><a href="#saving">Saving, printing and sharing</a></li>
+    <li><a href="#pub">Microsoft Publisher files</a></li>
+    <li><a href="#prefs">Preferences</a></li>
+    <li><a href="#ribbon">The ribbon, tab by tab</a></li>
+    <li><a href="#keys">Handy keys</a></li>
+    <li><a href="#help">When something goes wrong</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section class="cover">
+  <div class="kicker">User manual</div>
+  <h1>DTP Publisher Pro</h1>
+  <p class="lead">How to make flyers, newsletters, greeting cards, invitations, labels,
+  business cards and photo albums, and print them at home or take them to a print shop.</p>
+  <p class="lead">This manual is for DTP Publisher Pro 5.3. Press <kbd>F1</kbd> in the
+  program at any time to open it.</p>
+</section>
+
+<nav class="print-toc" aria-hidden="true">
+  <h2 class="plain">Contents</h2>
+  <ol>
+      <li><a href="#start">Getting started</a></li>
+      <li><a href="#first">Your first flyer, step by step</a></li>
+      <li><a href="#text">Words and text boxes</a></li>
+      <li><a href="#pictures">Pictures and photos</a></li>
+      <li><a href="#shapes">Shapes, WordArt, tables and building blocks</a></li>
+      <li><a href="#arrange">Moving, sizing and lining things up</a></li>
+      <li><a href="#pages">Pages and page setup</a></li>
+      <li><a href="#projects">Newsletters, cards, labels and albums</a></li>
+      <li><a href="#saving">Saving, printing and sharing</a></li>
+      <li><a href="#pub">Microsoft Publisher files</a></li>
+      <li><a href="#prefs">Preferences</a></li>
+      <li><a href="#ribbon">The ribbon, tab by tab</a></li>
+      <li><a href="#keys">Handy keys</a></li>
+      <li><a href="#help">When something goes wrong</a></li>
+    </ol>
+</nav>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="start"><span class="num">1</span>Getting started</h2>
+
+<h3>Starting the program</h3>
+<p>Double-click <b>DTP Publisher.exe</b> (or its shortcut on the desktop). The first thing you
+see is the start screen.</p>
+
+<h3>The start screen</h3>
+<figure>
+  <img src="img/start.png" alt="The start screen, with design categories on the left, a gallery of ready-made designs in the middle and recent publications on the right">
+  <figcaption>The start screen: kinds of design on the left, the designs themselves in the
+  middle, and things you worked on recently on the right.</figcaption>
+</figure>
+<ul>
+  <li>Click a kind of design on the left (for example <b>Cards &amp; invitations</b>) to see
+  just those.</li>
+  <li>Click a design to read what it is underneath, then press <b>Create</b>, or simply
+  double-click it.</li>
+  <li><b>Blank page</b> gives you an empty page in a size of your choice.</li>
+  <li>To carry on with something you made before, double-click it under <b>Open a recent
+  publication</b>, or press <b>Open another file…</b></li>
+</ul>
+<div class="tip"><b>Good to know</b>A design is only a starting point. Every word, picture,
+colour and size in it can be changed, and nothing you do changes the design itself.</div>
+
+<h3>The main window</h3>
+<figure>
+  <img src="img/window.png" alt="The main window with numbered parts">
+</figure>
+<ol class="callouts">
+  <li><b>Tabs.</b> <b>File</b>, <b>Home</b>, <b>Insert</b>, <b>Page Design</b>,
+  <b>Arrange</b> and <b>View</b>. Click one to show its buttons.</li>
+  <li><b>The ribbon.</b> The buttons for the tab you chose. Rest the mouse on any button
+  to see what it does.</li>
+  <li><b>The text bar.</b> Font, size, bold, colour, alignment, bullets and line spacing
+  for the words you are working on.</li>
+  <li><b>Pages.</b> A small picture of every page. Click one to go to it; drag it up or
+  down to change the order; right-click it for more.</li>
+  <li><b>Your page.</b> This is what will be printed. The pink dashed lines are the margins and
+  column guides; they don't print.</li>
+  <li><b>Format and Objects.</b> <b>Format</b> shows the settings of whatever you have
+  clicked on. <b>Objects</b> lists everything on the page.</li>
+  <li><b>Zoom.</b> Make the page look bigger or smaller. The button on the far right shows
+  the whole page again.</li>
+</ol>
+
+<h3>Making the buttons and writing bigger</h3>
+<p>Open <span class="path">File ▸ Preferences</span> and choose a bigger <b>Size of buttons and
+text</b> (up to 200%). The new size is used the next time the program starts. In the same place,
+<b>Look</b> offers a light, a dark and a <b>High contrast</b> style.</p>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="first"><span class="num">2</span>Your first flyer, step by step</h2>
+<p>The quickest way to learn is to change a ready-made design. This takes about ten minutes.</p>
+<ol class="steps">
+  <li>On the start screen click <b>Flyers &amp; posters</b>, then double-click <b>Event
+  flyer</b>.</li>
+  <li><b>Change the title.</b> Double-click the words <i>Community Fair</i>. They are now
+  ready for typing: select them and type your own title. Click on an empty part of the page
+  when you have finished.</li>
+  <li><b>Change the other words</b> the same way: the date line, the list of things on, the
+  address at the bottom.</li>
+  <li><b>Put in a photo.</b> Double-click the grey picture frame at the top and choose a
+  photo from your computer. It is trimmed to fit the frame. To show a different part of the
+  photo, use the sliders on the <b>Format</b> panel (see <a href="#pictures">Pictures</a>).</li>
+  <li><b>Save it.</b> Press <kbd>Ctrl</kbd>+<kbd>S</kbd>, choose a folder, type a name and
+  press <b>Save</b>.</li>
+  <li><b>Print it.</b> Press <kbd>Ctrl</kbd>+<kbd>P</kbd>, check the printer and press
+  <b>Print</b>.</li>
+</ol>
+<div class="tip"><b>Made a mistake?</b>Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> (Undo). You can undo
+again and again, all the way back, including deleting a page. <kbd>Ctrl</kbd>+<kbd>Y</kbd>
+puts it back again.</div>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="text"><span class="num">3</span>Words and text boxes</h2>
+
+<h3>Typing and changing words</h3>
+<p>Words always live in a <b>text box</b>. To type in one, double-click it (or click it once and
+press <kbd>F2</kbd>). A blinking line shows where your typing goes. Click outside the box, or
+press <kbd>Esc</kbd>, when you are done.</p>
+<figure>
+  <img src="img/typing.png" alt="A headline being edited, with the first word selected and the text bar showing its font and size">
+  <figcaption>Typing in the headline. The first word is selected, so the text bar shows its font
+  (and changes only that word).</figcaption>
+</figure>
+<ul>
+  <li><b>Select words</b> by dragging across them, or double-click a word. Then use the text bar:
+  font, size, <b>B</b>old, <i>I</i>talic, <u>U</u>nderline, colour, bigger/smaller, alignment,
+  bullets, numbering and line spacing.</li>
+  <li><b>Change a whole box at once</b>: click the box once (so it has handles round it, but you
+  are not typing in it) and use the text bar. Everything in the box changes.</li>
+  <li>To add a new box: <span class="path">Home ▸ Text Box</span> (or
+  <span class="path">Insert ▸ Text Box</span>), then type.</li>
+</ul>
+
+<h3>When the words don't fit</h3>
+<figure class="mid">
+  <img src="img/overflow.png" alt="A text box with too many words, showing a small red marker with three dots in its bottom corner">
+  <figcaption>The small red marker with three dots means some words are hidden.</figcaption>
+</figure>
+<p>If there are more words than the box can hold, a small red marker appears in its bottom
+corner. You can:</p>
+<ul>
+  <li>make the box bigger by dragging one of its handles;</li>
+  <li>use a smaller text size; or</li>
+  <li>click the box and, on the <b>Format</b> panel under <b>Text box</b>, set <b>Fit</b> to
+  <b>Shrink text on overflow</b> (the words get smaller to fit), <b>Best fit</b> (the words grow
+  or shrink to fill the box) or <b>Grow text box to fit</b> (the box gets taller).</li>
+</ul>
+<p>On the same panel, <b>Vertical</b> puts the words at the top, middle or bottom of the box,
+and <b>Inner margin</b> sets the space between the edge of the box and the words.</p>
+
+<h3>A story that carries on in another box</h3>
+<p>For newsletters, a story can flow from one box into another, even on a different page:</p>
+<ol class="steps">
+  <li>Click the first box.</li>
+  <li>Choose <span class="path">Insert ▸ Continue Text</span>.</li>
+  <li>Click an empty text box (go to another page first if you like). Words that don't fit in
+  the first box now carry on in the second, and move back and forth by themselves as you
+  edit.</li>
+</ol>
+<p>To stop it, click the first box and choose <span class="path">Insert ▸ Break Text Link</span>.</p>
+
+<h3>Copying words from Word, a web page or an email</h3>
+<p>Copy as usual and press <kbd>Ctrl</kbd>+<kbd>V</kbd> in a text box. Fonts and paragraphs
+come with it. A table turns into lines of words with the columns separated by tabs, and
+any pictures in what you copied are left out. Put pictures in separately (next section) so you
+can move them freely.</p>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="pictures"><span class="num">4</span>Pictures and photos</h2>
+
+<h3>Putting in a photo</h3>
+<ul>
+  <li><b>Into a frame:</b> double-click a grey picture frame and choose a photo.</li>
+  <li><b>Anywhere:</b> <span class="path">Home ▸ Picture</span> (or
+  <span class="path">Insert ▸ Picture</span>) and choose a photo.</li>
+  <li><b>Straight from a folder:</b> drag a photo from a folder window onto the page, or onto a
+  frame to fill that frame.</li>
+  <li><b>An empty frame for later:</b> <span class="path">Insert ▸ Picture Frame</span>.</li>
+</ul>
+<p>Photos from a phone are turned the right way up by themselves. Very large photos are made a
+sensible size so the file stays small, still sharp enough to print.</p>
+
+<h3>Choosing which part of the photo shows</h3>
+<figure>
+  <img src="img/picture_selected.png" alt="A photo selected on a flyer, with its settings on the Format panel">
+  <figcaption>A photo clicked once: handles round it, and its settings on the
+  <b>Format</b> panel.</figcaption>
+</figure>
+<p>Click the photo once. On the <b>Format</b> panel, scroll down to <b>Picture</b>:</p>
+<ul>
+  <li><b>Fit</b>: <b>Fill frame (crop)</b> fills the frame and trims the edges;
+  <b>Fit inside frame</b> shows the whole photo; <b>Stretch</b> squeezes it to the frame's shape.</li>
+  <li><b>Show left ↔ right</b> and <b>Show top ↕ bottom</b> slide the photo inside its frame, so
+  you can choose which part is trimmed off.</li>
+  <li><b>Round corners</b> softens the corners.</li>
+  <li><b>Make frame match picture shape</b> changes the frame to the photo's own shape.</li>
+  <li><b>Change picture…</b> swaps in a different photo but keeps the size and position.</li>
+</ul>
+<p>Under <b>Colour and line</b> you can give the photo a border (<b>Line</b> and <b>Line
+width</b>) and make it see-through (<b>Transparency</b>).</p>
+
+<h3>Words flowing around a photo</h3>
+<figure class="mid">
+  <img src="img/wrap.png" alt="A paragraph of text flowing around a photo placed on the right">
+  <figcaption>With <b>Wrap Square</b>, the story moves aside for the photo.</figcaption>
+</figure>
+<p>Put a photo on top of a text box and the words move round it. To change how, click the photo
+and choose one of these on the <b>Arrange</b> tab (under <b>Text wrap</b>), by right-clicking the
+photo and choosing <b>Wrap Text</b>, or with <b>Text wrap</b> on the <b>Format</b> panel:</p>
+<table>
+  <tr><th>Choice</th><th>What happens</th></tr>
+  <tr><td><b>Wrap Square</b></td><td>Words flow down the side of the photo.</td></tr>
+  <tr><td><b>Wrap Top and Bottom</b></td><td>Words stop above the photo and carry on below it.</td></tr>
+  <tr><td><b>No Wrapping</b></td><td>The words stay where they are and the photo sits on top of
+  them (or behind them, if you send it to the back).</td></tr>
+</table>
+<p>This works for any object, including a box of text placed over another story.</p>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="shapes"><span class="num">5</span>Shapes, WordArt, tables and building blocks</h2>
+
+<h3>Shapes and lines</h3>
+<p><span class="path">Home ▸ Shapes</span> or <span class="path">Insert ▸ Shapes</span> gives a
+rectangle, rounded rectangle, oval, triangle, diamond, pentagon, hexagon, star, arrow, heart and
+line. On the <b>Format</b> panel, <b>Fill</b> is the colour inside, <b>Line</b> the colour of the
+edge, and <b>Shape</b> changes it into a different shape.</p>
+
+<h3>WordArt: decorative headings</h3>
+<figure class="narrow">
+  <img src="img/wordart.png" alt="The WordArt window with a preview, text, font, shape and quick style buttons">
+</figure>
+<p><span class="path">Insert ▸ WordArt</span>. Type your words, pick a <b>Shape</b> (straight,
+arched, wave or bulge) and click one of the <b>Quick styles</b>, or choose your own colours.
+To change it later, double-click it.</p>
+
+<h3>Tables</h3>
+<p><span class="path">Insert ▸ Table</span>. Choose how many rows and columns, type into the
+cells (<kbd>Tab</kbd> moves to the next cell) and press <b>OK</b>. <b>First row is a heading</b>
+and <b>Shade every other row</b> make it easy to read. Double-click a table to change it.</p>
+
+<h3>Building blocks: ready-made pieces</h3>
+<p>The <b>Insert</b> tab has ready-made pieces to drop on the page:
+<b>Heading Band</b>, <b>Footer</b>, <b>Heading and story</b>, <b>Pull quote</b>, <b>Sidebar box</b>,
+<b>Coupon</b>, <b>Page number</b> and <b>Today's date</b>. A page number keeps itself
+correct when you add or move pages.</p>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="arrange"><span class="num">6</span>Moving, sizing and lining things up</h2>
+
+<h3>Selecting</h3>
+<p>Click something once to select it: it gets small handles round it and its settings appear on
+the <b>Format</b> panel. To select several things, hold <kbd>Shift</kbd> while clicking, or drag
+a box around them on an empty part of the page. <kbd>Ctrl</kbd>+<kbd>A</kbd> selects everything
+on the page; <kbd>Esc</kbd> lets go.</p>
+<div class="tip"><b>Can't click something because something else is on top of it?</b>Open the
+<b>Objects</b> tab on the right. It lists everything on the page; click a name to select it.</div>
+
+<h3>Moving, resizing and turning</h3>
+<ul>
+  <li><b>Move:</b> drag it. For small steps use the arrow keys (hold <kbd>Shift</kbd> for
+  bigger steps).</li>
+  <li><b>Resize:</b> drag a handle. Photos keep their shape.</li>
+  <li><b>Turn:</b> drag the little circle above it. <span class="path">Arrange ▸ Rotate
+  Left 90°</span>, <b>Rotate Right 90°</b> and the <b>Flip</b> buttons do it exactly.</li>
+  <li><b>Exact sizes:</b> type them on the <b>Format</b> panel under <b>Position and size</b>.</li>
+</ul>
+<table>
+  <tr><th>Hold this while dragging</th><th>What it does</th></tr>
+  <tr><td><kbd>Shift</kbd></td><td>Move in a straight line, or resize without keeping the shape</td></tr>
+  <tr><td><kbd>Ctrl</kbd></td><td>Resize from the middle</td></tr>
+  <tr><td><kbd>Alt</kbd></td><td>Stop things snapping into line</td></tr>
+</table>
+<p>While you drag, red lines appear when something lines up with the page, the margins or
+another object, and it clicks into place.</p>
+
+<h3>Lining up and spacing out</h3>
+<p>On the <b>Arrange</b> tab: <b>Align Left</b>, <b>Align Centre</b>, <b>Align Right</b>,
+<b>Align Top</b>, <b>Align Middle</b> and <b>Align Bottom</b> line up the selected things with
+each other. With just one thing selected, they line it up with the page margins, handy for
+centring a title. <b>Distribute Across</b> and <b>Distribute Down</b> space three or more things
+evenly.</p>
+
+<h3>In front and behind</h3>
+<p>Things on a page are stacked like pieces of paper. <b>Bring to Front</b> and <b>Send to
+Back</b> (and <b>Bring Forward</b> / <b>Send Backward</b>, one step at a time) change the order.
+Use <b>Send to Back</b> to put a photo or coloured shape behind words.</p>
+
+<h3>Group, lock and copy</h3>
+<ul>
+  <li><b>Group</b> (<kbd>Ctrl</kbd>+<kbd>G</kbd>) joins the selected things so they move as one;
+  <b>Ungroup</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd>) splits them again.</li>
+  <li><b>Lock</b> stops something being moved by accident. Click <b>Lock</b> again to unlock it.
+  Ticks on the <b>Objects</b> tab also lock and hide things.</li>
+  <li><b>Duplicate</b> (<kbd>Ctrl</kbd>+<kbd>D</kbd>) makes a copy next to the original.</li>
+</ul>
+
+<h3>Guides and the grid</h3>
+<p>Drag from the ruler at the top or left onto the page to add a guide line you can line things
+up against. Drag a guide off the page to remove it, or use
+<span class="path">Page Design ▸ Remove Ruler Guides</span>. The <b>View</b> tab turns guides,
+the grid and dotted box outlines on or off, and chooses what things snap to.</p>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="pages"><span class="num">7</span>Pages and page setup</h2>
+
+<h3>Adding, copying and moving pages</h3>
+<ul>
+  <li><b>Add page</b> (under the page pictures on the left, or on the <b>Page Design</b> tab) adds
+  a page after the one you are on.</li>
+  <li><b>Duplicate Page</b> copies the page with everything on it. Good for a second page in the
+  same style.</li>
+  <li><b>Delete</b> removes the page you are on (and <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings it back).</li>
+  <li>Drag a page picture up or down to change the order. Right-click it to rename it.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>PgDn</kbd> and <kbd>Ctrl</kbd>+<kbd>PgUp</kbd> go to the next and
+  previous page.</li>
+</ul>
+
+<h3>Paper size, margins and colour</h3>
+<p>The <b>Page Design</b> tab has quick menus for <b>Size</b>, <b>Orientation</b> (tall or wide),
+<b>Margins</b> and <b>Page Colour</b>. For everything at once, click <b>Page Setup</b>:</p>
+<figure>
+  <img src="img/page_setup.png" alt="The Page setup window with paper size, margins, layout guides, page colour and label sheet settings">
+</figure>
+<ul>
+  <li><b>Paper size</b>: choose a size or type your own.</li>
+  <li><b>Margins</b> are the pink dashed lines. Most home printers can't print right to the edge,
+  so keep important things at least 5 mm inside the paper.</li>
+  <li><b>Layout guides</b> divide the page into columns (and rows) to help line things up. They
+  don't print.</li>
+  <li><b>Labels and cards</b>: see <a href="#labels">Labels</a> below.</li>
+  <li><b>Apply size, margins and guides to every page</b> changes all the pages, not just this one.</li>
+</ul>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="projects"><span class="num">8</span>Newsletters, cards, labels and albums</h2>
+
+<h3>Newsletters</h3>
+<p>Start from <b>Newsletter</b> on the start screen: two pages in three columns with a heading,
+stories, photos, an events table and page numbers. Replace the words and photos with your own.
+If a story is too long for its box, let it carry on in another box with
+<span class="path">Insert ▸ Continue Text</span> (see <a href="#text">Words and text
+boxes</a>). For more pages, use <b>Duplicate Page</b> and change the words.</p>
+
+<h3>Greeting cards</h3>
+<p>The <b>Greeting card</b> design folds in half and has two pages: <b>Outside</b> and
+<b>Inside</b>.</p>
+<ol class="steps">
+  <li>Print the <b>Outside</b> page only (it is first in the list of pages).</li>
+  <li>Put the same sheet back in the printer, turned over (which way round depends on your
+  printer; try it on plain paper first and mark the top with a pencil).</li>
+  <li>Print the <b>Inside</b> page.</li>
+  <li>Fold in half.</li>
+</ol>
+<p><b>Party invitation</b> (5 × 7 inches) and <b>Postcard</b> (6 × 4 inches, photo on the front,
+message and address on the back) work the same way.</p>
+
+<h3 id="labels">Address labels and business cards</h3>
+<p>There are two ways, depending on whether every label is the same.</p>
+<p><b>All the same</b> (your own address, or business cards):</p>
+<ol class="steps">
+  <li>Design one label or card, then group it (select everything on it and press
+  <kbd>Ctrl</kbd>+<kbd>G</kbd>).</li>
+  <li>Choose <span class="path">Arrange ▸ Fill Page with Copies</span>, set the gaps (if any),
+  and press <b>OK</b>. The page fills with copies.</li>
+</ol>
+<figure class="narrow">
+  <img src="img/fill_page.png" alt="The Fill page with copies window with gap settings">
+</figure>
+<figure class="narrow">
+  <img src="img/bizcards.png" alt="A sheet of ten identical business cards">
+  <figcaption>The <b>Business cards</b> design: ten cards on one A4 sheet.</figcaption>
+</figure>
+<p><b>All different</b> (a different address on each label):</p>
+<ol class="steps">
+  <li>Start with a blank page and open <span class="path">Page Design ▸ Page Setup</span>.</li>
+  <li>Tick <b>Print several pages on each sheet (labels, business cards)</b> and choose your
+  <b>Label sheet</b> (the Avery number is printed on the packet). The page becomes the size of
+  one label.</li>
+  <li>Set <b>Printing</b> to <b>Print the pages one after another (one label each)</b> and press
+  <b>OK</b>.</li>
+  <li>Type the first address. For each next one, use <b>Duplicate Page</b> and change the
+  words.</li>
+  <li>Print. Each page lands on its own label. Printing and PDFs both place them
+  correctly on the sheet.</li>
+</ol>
+<p>With <b>Printing</b> set to <b>Fill a whole sheet with each page</b> instead, each page
+prints a whole sheet of the same label: another way to do your own address labels.</p>
+<div class="note"><b>Always do a test print first</b>Print on plain paper, hold it against a sheet
+of labels up to the light, and check everything lines up before using the real labels.</div>
+<p>Label sheets included: Avery L7651/L7551 (65 mini labels), L7160 (21), L7159 (24),
+L7161 (18), L7162 (16), L7163 (14), L7173 (10), L7165 (8), and 10 business cards per sheet. The
+<b>Address labels</b> design on the start screen is a whole A4 sheet of 14 boxes laid out to fit
+L7163 labels: just type an address in each box.</p>
+
+<h3>Photo albums and collages</h3>
+<p><b>Photo album pages</b> gives landscape pages of photo frames with captions; <b>Photo
+collage</b> is a 12 × 12 inch scrapbook page. Drag photos from a folder straight onto the frames,
+then type the captions. Add more pages with <b>Duplicate Page</b>.</p>
+
+<h3>Signs, posters and certificates</h3>
+<p><b>Notice / sign</b> is a big, bold A4 sign easy to read from across a room. <b>Poster</b> is
+A3. On an A4 printer the A3 poster is shrunk to fit the paper
+by itself; for full size, save it as a PDF and have a print shop print it. <b>Certificate</b> is A4 landscape
+with a border and signature lines.</p>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="saving"><span class="num">9</span>Saving, printing and sharing</h2>
+
+<h3>Saving</h3>
+<ul>
+  <li><b>Save</b> (<kbd>Ctrl</kbd>+<kbd>S</kbd>). The first time, you choose a folder and a name.
+  Your work is saved as a <b>.dtpub</b> file, with all the photos inside it, so it can be copied
+  to a USB stick or another computer in one piece.</li>
+  <li><b>Save As</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) saves a copy under a new
+  name, for example to start next month's newsletter from this one.</li>
+  <li>When you save, the previous version is kept next to it as <b>name.dtpub.bak</b>, just in
+  case.</li>
+</ul>
+
+<h3>If the computer stops unexpectedly</h3>
+<p>A recovery copy of your work is saved every few minutes. If the power goes off or the program
+closes before you saved, the next time it starts it offers to bring your work back:</p>
+<figure class="narrow">
+  <img src="img/recovery.png" alt="The Recover unsaved work window listing one recovery copy">
+</figure>
+<p>Click <b>Open</b>, then save it straight away with <span class="path">File ▸ Save As</span>.</p>
+
+<h3>Printing</h3>
+<p><span class="path">File ▸ Print</span> (<kbd>Ctrl</kbd>+<kbd>P</kbd>). Choose the printer,
+which pages, and how many copies. A page that is the same size as the paper prints at exactly
+the right size, so labels and cards line up. Other sizes are shrunk or enlarged to fit
+the paper.</p>
+<div class="tip"><b>Printer settings</b>If labels come out slightly too small, look in the
+printer's own settings (the <b>Properties</b> or <b>Preferences</b> button) for a "fit to page"
+or "scale" setting and set it to 100% or <b>Actual size</b>.</div>
+
+<h3>A PDF to email or take to a print shop</h3>
+<p><span class="path">File ▸ Save as PDF</span>. A PDF looks the same on any computer, phone
+or tablet, and print shops are happy to print from it. Photos in it are kept at print quality
+(300 dpi).</p>
+
+<h3>A picture of the page</h3>
+<figure class="narrow">
+  <img src="img/save_picture.png" alt="The Save as picture window with type, quality and pages">
+</figure>
+<p><span class="path">File ▸ Save as Picture</span> saves a page as a picture: <b>JPEG</b> is
+smaller and good for email or Facebook; <b>PNG</b> is the best quality. Choose <b>Screen / email</b>
+quality for sending, or <b>Print quality</b> to print it elsewhere.</p>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="pub"><span class="num">10</span>Microsoft Publisher files</h2>
+
+<h3>Opening a Publisher (.pub) file</h3>
+<p>Open it like any other file, with <span class="path">File ▸ Open</span>, by dragging it onto the
+window, or by double-clicking it (see below). This needs the free program
+<b>LibreOffice</b> installed on the computer. You never see LibreOffice; it reads the file in the
+background. If it isn't installed, the program says so and offers a button to get it.</p>
+<ul>
+  <li>Big files can take a minute or two.</li>
+  <li>Check the result over: fonts, spacing and text wrapping can differ a little from Publisher.</li>
+  <li>Your <b>.pub file is never changed</b>. When you save, a new DTP Publisher (.dtpub) file is
+  made.</li>
+</ul>
+
+<h3 id="double-click">Opening files by double-clicking them</h3>
+<p>To open <b>.dtpub</b> and <b>.pub</b> files by double-clicking them in File Explorer:</p>
+<ol class="steps">
+  <li>Open <span class="path">File ▸ Preferences</span>.</li>
+  <li>Under <b>Double-click to open</b>, tick <b>DTP Publisher publications (.dtpub)</b> and,
+  if you like, <b>Microsoft Publisher files (.pub)</b>.</li>
+  <li>Press <b>OK</b>.</li>
+</ol>
+<p>If another program was already chosen for those files (often the case for .pub), Windows
+asks you to confirm the change yourself. The program tells you, and offers to open Windows
+Settings. There, choose <b>DTP Publisher Pro</b> for .pub. Untick the boxes to go back to how it
+was before.</p>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="prefs"><span class="num">11</span>Preferences</h2>
+<figure class="narrow">
+  <img src="img/prefs.png" alt="The Preferences window">
+</figure>
+<p><span class="path">File ▸ Preferences</span>:</p>
+<table>
+  <tr><th>Setting</th><th>What it does</th></tr>
+  <tr><td><b>Look</b></td><td>Light, dark or high contrast colours for the program (not your
+  pages).</td></tr>
+  <tr><td><b>Size of buttons and text</b></td><td>Bigger buttons and writing, from the next
+  start.</td></tr>
+  <tr><td><b>Measure in</b></td><td>Millimetres, inches or points for all sizes.
+  You can also click the small box where the rulers meet.</td></tr>
+  <tr><td><b>Save a recovery copy every</b></td><td>How often your work is saved in case of a
+  power cut.</td></tr>
+  <tr><td><b>Keep the previous version as a .bak file</b></td><td>The safety copy made each
+  time you save.</td></tr>
+  <tr><td><b>Show the start screen</b></td><td>Whether the start screen opens when the program
+  starts.</td></tr>
+  <tr><td><b>Double-click to open</b></td><td>See <a href="#double-click">above</a>.</td></tr>
+</table>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="ribbon"><span class="num">12</span>The ribbon, tab by tab</h2>
+
+<h3>File</h3>
+<figure><img src="img/ribbon_file.png" alt="The File tab"></figure>
+<p>New, open, and recent publications; save; PDF, picture and print; preferences and this
+manual.</p>
+
+<h3>Home</h3>
+<figure><img src="img/ribbon_home.png" alt="The Home tab"></figure>
+<p>The everyday buttons: paste/cut/copy/duplicate, undo/redo, add a text box, picture or shape,
+front/back and group, delete, select all, edit text and lock.</p>
+
+<h3>Insert</h3>
+<figure><img src="img/ribbon_insert.png" alt="The Insert tab"></figure>
+<p>Text boxes, WordArt, tables and linked stories; pictures and empty picture frames; shapes;
+and the building blocks.</p>
+
+<h3>Page Design</h3>
+<figure><img src="img/ribbon_pagedesign.png" alt="The Page Design tab"></figure>
+<p>Page setup, size, orientation, margins and page colour; add, copy, delete, move and rename
+pages; guides and grid.</p>
+
+<h3>Arrange</h3>
+<figure><img src="img/ribbon_arrange.png" alt="The Arrange tab"></figure>
+<p>Line up and space out, order front to back, group, rotate and flip, text wrap, lock, and
+fill the page with copies.</p>
+
+<h3>View</h3>
+<figure><img src="img/ribbon_view.png" alt="The View tab"></figure>
+<p>Zoom, show or hide guides, outlines and grid, choose what things snap to, and the
+program's look.</p>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="keys"><span class="num">13</span>Handy keys</h2>
+<table>
+  <tr><th>Keys</th><th>What they do</th></tr>
+  <tr><td><kbd>F1</kbd></td><td>Open this manual</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>O</kbd> / <kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>New / Open / Save</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Print</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Undo / Redo</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Copy / Cut / Paste</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Duplicate</td></tr>
+  <tr><td><kbd>Delete</kbd></td><td>Delete what is selected</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd> / <kbd>Esc</kbd></td><td>Select everything on the page / let go</td></tr>
+  <tr><td>Arrow keys (with <kbd>Shift</kbd> for bigger steps)</td><td>Nudge what is selected</td></tr>
+  <tr><td><kbd>F2</kbd></td><td>Type in the selected text box</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>Ctrl</kbd>+<kbd>I</kbd> / <kbd>Ctrl</kbd>+<kbd>U</kbd></td><td>Bold / Italic / Underline</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>L</kbd> / <kbd>Ctrl</kbd>+<kbd>E</kbd> / <kbd>Ctrl</kbd>+<kbd>R</kbd> / <kbd>Ctrl</kbd>+<kbd>J</kbd></td><td>Words to the left / centre / right / both edges</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>G</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td><td>Group / Ungroup</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>]</kbd> / <kbd>Ctrl</kbd>+<kbd>[</kbd></td><td>Bring forward / Send backward</td></tr>
+  <tr><td><kbd>Ctrl</kbd> + mouse wheel</td><td>Zoom in and out</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd> / <kbd>Ctrl</kbd>+<kbd>1</kbd></td><td>Whole page / actual size</td></tr>
+  <tr><td><kbd>Space</kbd> + drag, or the middle mouse button</td><td>Move around the page</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>PgUp</kbd> / <kbd>Ctrl</kbd>+<kbd>PgDn</kbd></td><td>Previous / next page</td></tr>
+</table>
+
+<!-- ───────────────────────────────────────────────────────────────── -->
+<h2 id="help"><span class="num">14</span>When something goes wrong</h2>
+<div class="qa">
+<h3>I deleted something by mistake</h3>
+<p>Press <kbd>Ctrl</kbd>+<kbd>Z</kbd>, as many times as you need.</p>
+
+<h3>Something won't move or can't be clicked</h3>
+<p>It may be locked: click it and click <b>Lock</b> (Home or Arrange tab) to unlock it. If
+something else is on top of it, select it by name on the <b>Objects</b> tab.</p>
+
+<h3>Part of my text has disappeared</h3>
+<p>Look for the small red marker in the corner of the box: the box is too small. See
+<a href="#text">When the words don't fit</a>.</p>
+
+<h3>The edge of the page doesn't print</h3>
+<p>Most home printers can't print right to the edge of the paper. Keep words and important
+parts of photos at least 5 mm inside, or use a PDF at a print shop for edge-to-edge printing.</p>
+
+<h3>Labels don't line up</h3>
+<p>Check the <b>Label sheet</b> in <span class="path">Page Design ▸ Page Setup</span> matches the
+number on the packet, and that the printer's own settings print at 100% (<b>Actual size</b>), not
+"fit to page". Do a test print on plain paper.</p>
+
+<h3>A .pub file won't open</h3>
+<p>Install LibreOffice (it's free), then try again. If it still won't open, the file may be
+damaged. Try opening it in Publisher on another computer and saving it again.</p>
+
+<h3>The program closed by itself</h3>
+<p>Start it again; it offers to bring back your work (see <a href="#saving">If the computer
+stops unexpectedly</a>). Details of what went wrong are written to a file called
+<b>crash.log</b> in the program's settings folder, which helps whoever looks after the program
+fix it. To find it, type <b>%APPDATA%\DTP Publisher</b> into the address bar of File Explorer.</p>
+
+<h3>I can't find a file I made</h3>
+<p>The files you worked on lately are listed on the start screen and under
+<span class="path">File ▸ Recent</span>. On the start screen, rest the mouse on one to see which
+folder it is in.</p>
+</div>
+
+<p class="backtop"><a href="#start">Back to the top</a></p>
+</main>
+</div>
+</body>
+</html>

@@ -17,6 +17,16 @@ from ...items.table import MAX_COLS, MAX_ROWS
 from ...items.wordart import WARPS, wordart_path
 from ..widgets import ColorButton, hint_label
 
+def preset_button_style(ps: Dict[str, Any]) -> str:
+    """A quick-style button shows its colour on white in every theme (like the
+    preview above it); a very light style is shown in its outline colour."""
+    fill = QColor(ps["fill"])
+    text = ps["stroke"] if fill.lightnessF() > 0.85 else ps["fill"]
+    return (f"QPushButton{{color:{text}; background:#ffffff; font-weight:700;"
+            f" border:1px solid #b0b0b0; border-radius:4px; padding:6px;}}"
+            f"QPushButton:hover{{border:2px solid {ps['stroke']};}}")
+
+
 WORDART_PRESETS = [
     ("Ocean", {"fill": "#1f5fbf", "fill2": "#7fb2ff", "stroke": "#0b2a5c", "gradient": True,
                "shadow": True}),
@@ -102,7 +112,8 @@ class WordArtDialog(QDialog):
         grid = QGridLayout()
         for i, (name, ps) in enumerate(WORDART_PRESETS):
             b = QPushButton(name)
-            b.setStyleSheet(f"QPushButton{{color:{ps['fill']}; font-weight:700;}}")
+            b.setObjectName("WordArtStyle")
+            b.setStyleSheet(preset_button_style(ps))
             b.clicked.connect(lambda _=False, p=ps: self._preset(p))
             grid.addWidget(b, i // 4, i % 4)
         v.addLayout(grid)

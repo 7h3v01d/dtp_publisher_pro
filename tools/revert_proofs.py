@@ -463,6 +463,21 @@ PROOFS = [
      '        self._apply_file_types(dlg.assoc_wanted())\n',
      '',
      ['tests/test_winassoc.py::test_preferences_tick_boxes_register']),
+    ('5.3.1 Help: F1 does not open the manual',
+     'ui/window.py',
+     '        A("manual", "User Manual", self.open_manual, "manual", "F1",\n',
+     '        A("manual", "User Manual", self.open_manual, "manual", None,\n',
+     ['tests/test_manual.py::test_f1_opens_the_manual']),
+    ('5.3.1 WordArt: white style invisible on its white button',
+     'ui/dialogs/editors.py',
+     '    text = ps["stroke"] if fill.lightnessF() > 0.85 else ps["fill"]\n',
+     '    text = ps["fill"]\n',
+     ['tests/test_ui.py::test_wordart_quick_style_buttons_are_readable_in_every_theme']),
+    ('5.3.1 Pages panel buttons side by side (label cut off)',
+     'ui/panels/thumbs.py',
+     '        row = QVBoxLayout()                 # one above the other: full labels at any width\n',
+     '        from PyQt6.QtWidgets import QHBoxLayout\n        row = QHBoxLayout()\n',
+     ['tests/test_ui.py::test_page_panel_buttons_show_their_whole_label']),
 ]
 
 

@@ -54,6 +54,12 @@ DOC_FILTER = (f"Everything I can open (*{FILE_EXT} *.pub *.json);;"
 NUDGE, NUDGE_BIG = 1.0, mm(5)
 
 
+def manual_path() -> str:
+    """help/manual.html inside the package (also inside the built .exe)."""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "help", "manual.html")
+
+
 class MainWindow(QMainWindow):
     def __init__(self, s: Optional[settings_mod.Settings] = None, doc: Optional[Document] = None):
         super().__init__()
@@ -134,6 +140,8 @@ class MainWindow(QMainWindow):
         A("print", "Print", self.print_doc, "print", "Ctrl+P", "Print the publication")
         A("prefs", "Preferences", self.preferences, "settings", None,
           "Change the look, button size and measurements")
+        A("manual", "User Manual", self.open_manual, "manual", "F1",
+          "How to use the program, with pictures")
         A("about", "About", self.about, "help")
         A("quit", "Exit", self.close, "close", "Ctrl+Q")
         # edit
@@ -412,6 +420,8 @@ class MainWindow(QMainWindow):
         g.add_large(a["print"])
         g = p.group("Options")
         g.add_large(a["prefs"])
+        g = p.group("Help")
+        g.add_large(a["manual"])
         g.add_large(a["about"])
         # Home
         p = R.page("Home")
@@ -2059,6 +2069,17 @@ class MainWindow(QMainWindow):
         self.ruler_h.update()
         self.ruler_v.update()
         self._view_changed()
+
+    def open_manual(self):
+        """The user manual, in the web browser (it works without the internet)."""
+        path = manual_path()
+        if not os.path.isfile(path):
+            QMessageBox.warning(self, "User Manual",
+                                f"The manual is missing from the program folder:\n{path}")
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(path)):
+            QMessageBox.information(self, "User Manual",
+                                    f"Open this file in your web browser:\n{path}")
 
     def about(self):
         QMessageBox.about(self, f"About {APP_NAME}", about_text())

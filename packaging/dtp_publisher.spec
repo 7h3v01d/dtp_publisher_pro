@@ -12,7 +12,9 @@ a = Analysis(
     [os.path.join(ROOT, "run.py")],
     pathex=[os.path.join(ROOT, "src")],
     datas=[(os.path.join(ROOT, "LICENSE"), "."), (os.path.join(ROOT, "NOTICE"), "."),
-           (os.path.join(ROOT, "README.md"), ".")],
+           (os.path.join(ROOT, "README.md"), "."),
+           # the user manual opened by Help > User Manual (F1), with its pictures
+           (os.path.join(ROOT, "src", "dtp_publisher", "help"), "dtp_publisher/help")],
     hiddenimports=["PyQt6.QtPrintSupport"],
     excludes=["tkinter", "pytest", "PyQt6.QtWebEngineCore", "PyQt6.QtWebEngineWidgets",
               "PyQt6.QtQml", "PyQt6.QtQuick", "PyQt6.QtMultimedia", "PyQt6.QtNetwork",

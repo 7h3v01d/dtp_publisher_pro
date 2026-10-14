@@ -8,7 +8,7 @@ from typing import Dict, Optional, Set
 
 from PyQt6.QtCore import QPoint, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
-from PyQt6.QtWidgets import (QAbstractItemView, QHBoxLayout, QListWidget, QListWidgetItem,
+from PyQt6.QtWidgets import (QAbstractItemView, QListWidget, QListWidgetItem, QSizePolicy,
                              QToolButton, QVBoxLayout, QWidget)
 
 from ... import theme
@@ -67,7 +67,8 @@ class ThumbPanel(QWidget):
         self.list.customContextMenuRequested.connect(self._ctx)
         self.list.moveRequested.connect(self.moveRequested)
         v.addWidget(self.list, 1)
-        row = QHBoxLayout()
+        row = QVBoxLayout()                 # one above the other: full labels at any width
+        row.setSpacing(4)
         self.btn_add = QToolButton()
         self.btn_add.setText("Add page")
         self.btn_add.setToolTip("Add a new page after this one")
@@ -77,6 +78,7 @@ class ThumbPanel(QWidget):
         for b in (self.btn_add, self.btn_del):
             b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             b.setIconSize(QSize(18, 18))
+            b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             row.addWidget(b)
         self.btn_add.clicked.connect(self.addRequested)
         self.btn_del.clicked.connect(self.deleteRequested)

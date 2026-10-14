@@ -526,3 +526,35 @@ def test_error_handler_survives_a_missing_console(tmp_path, monkeypatch, qapp):
     finally:
         sys.excepthook = old
     assert "ValueError: boom" in log.read_text() and shown
+
+
+def test_wordart_quick_style_buttons_are_readable_in_every_theme(qapp):
+    """'White outline' was white text on a white button, and 'Classic black'
+    vanished on the dark theme's buttons."""
+    import re
+
+    from PyQt6.QtGui import QColor
+
+    from dtp_publisher.ui.dialogs.editors import WORDART_PRESETS, preset_button_style
+
+    def lum(c):
+        def ch(v):
+            v /= 255
+            return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+        return 0.2126 * ch(c.red()) + 0.7152 * ch(c.green()) + 0.0722 * ch(c.blue())
+
+    for name, ps in WORDART_PRESETS:
+        css = preset_button_style(ps)
+        fg = QColor(re.search(r"color:(#[0-9a-fA-F]{6})", css).group(1))
+        bg = QColor(re.search(r"background:(#[0-9a-fA-F]{6})", css).group(1))
+        hi, lo = sorted((lum(fg), lum(bg)), reverse=True)
+        assert (hi + 0.05) / (lo + 0.05) >= 3.0, name
+
+
+def test_page_panel_buttons_show_their_whole_label(window):
+    """At 1300 px wide, side by side they were cut to "Ad...ge"."""
+    window.resize(1300, 820)
+    window.show()
+    QApplication.processEvents()
+    for b in (window.thumbs.btn_add, window.thumbs.btn_del):
+        assert b.width() >= b.sizeHint().width(), b.text()

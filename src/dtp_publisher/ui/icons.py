@@ -557,6 +557,16 @@ def _help(d):
     d.text(3, 3, 18, 18, "?", 13, color=d.ac)
 
 
+def _manual(d):
+    """An open book."""
+    d.poly([(12, 6.5), (3, 4.5), (3, 18.5), (12, 20.5)], fill=_soft(d.ac, 60))
+    d.poly([(12, 6.5), (21, 4.5), (21, 18.5), (12, 20.5)], fill=_soft(d.ac, 60))
+    d.pen(d.ac, 1.3)
+    for y in (9.5, 12.5, 15.5):
+        d.line(5.5, y - 1.2, 9.5, y - 0.3)
+        d.line(14.5, y - 0.3, 18.5, y - 1.2)
+
+
 def _templates(d):
     d.rect(3, 3, 8, 8, fill=_soft(d.ac, 120))
     d.rect(13, 3, 8, 8)
@@ -695,7 +705,7 @@ ICONS: Dict[str, Callable] = {
     "wrap_top_bottom": _wrap("top_bottom"), "zoom_in": _zoom("in"), "zoom_out": _zoom("out"),
     "zoom_fit": _zoom("fit"), "zoom_100": _zoom("100"), "grid": _grid, "guides": _guides,
     "boundaries": _boundaries, "snap": _snap, "theme": _theme, "settings": _settings,
-    "help": _help, "templates": _templates, "recent": _recent, "close": _close,
+    "help": _help, "manual": _manual, "templates": _templates, "recent": _recent, "close": _close,
     "fill_page": _fill_page, "bold": _fmt("B"), "italic": _fmt("I", bold=False, italic=True),
     "underline": _fmt("U", bold=False, underline=True), "talign_left": _talign("left"),
     "talign_center": _talign("center"), "talign_right": _talign("right"),
