@@ -121,3 +121,59 @@ def test_label_sheet_prints_at_exact_size_on_matching_paper(qapp, tmp_path):
 def test_same_size_helper():
     assert export.same_size(595, 842, 595.3, 841.9)
     assert not export.same_size(595, 842, 612, 792)
+
+
+def test_pdf_photos_are_embedded_at_print_resolution(qapp, doc, page, tmp_path):
+    """A 3000-pixel photo in a 150 pt frame needs 625 pixels at 300 dpi; the
+    150-photo album's PDF was 323 MB before."""
+    import re
+    from PyQt6.QtGui import QColor, QImage
+    from dtp_publisher.export import export_pdf, render_page_image
+    from dtp_publisher.geometry import Geo
+    from dtp_publisher.items import ImageItem
+    from dtp_publisher.items.image import encode_image
+    img = QImage(3000, 2250, QImage.Format.Format_RGB32)
+    img.fill(QColor("#3366aa"))
+    data, fmt = encode_image(img, "jpg")
+    im = ImageItem(150, 112.5)
+    im.set_image_data(data, fmt, "a.jpg", img)
+    im.set_geometry(Geo(50, 50, 150, 112.5, 0))
+    page.addItem(im)
+    out = tmp_path / "p.pdf"
+    export_pdf(doc, str(out))
+    widths = [int(w) for w in re.findall(rb"/Width\s+(\d+)", out.read_bytes())]
+    assert widths and max(widths) <= 640
+    # Save as Picture keeps every pixel: 1-pixel stripes stay sharp at 600 dpi
+    stripes = QImage(3000, 100, QImage.Format.Format_RGB32)
+    for x in range(3000):
+        for y in range(100):
+            stripes.setPixel(x, y, 0xFF000000 if x % 2 else 0xFFFFFFFF)
+    data, fmt = encode_image(stripes, "png")
+    im.set_image_data(data, fmt, "s.png", stripes)
+    im.fit_mode = "stretch"
+    im.set_geometry(Geo(0, 0, 500, 300, 0))       # 4,167 px wide at 600 dpi
+    big = render_page_image(page, 600)
+    row = [QColor(big.pixel(x, 600)).lightness() for x in range(1000, 1100)]
+    assert max(row) - min(row) > 150
+
+
+
+def test_templates_fit_on_computers_with_taller_fonts(qapp, monkeypatch):
+    """Windows' real Calibri/Georgia have taller lines than the stand-ins used
+    elsewhere; template text overflowed there.  Simulated with a font whose
+    lines are 1.5 em tall (Calibri's are 1.22)."""
+    from PyQt6.QtGui import QFontDatabase
+    if "Poppins" not in QFontDatabase.families():
+        pytest.skip("needs a tall font to simulate with")
+    from dtp_publisher.items.text import TextItem
+    real_set, real_add = TextItem.set_text, TextItem.add_paragraphs
+    monkeypatch.setattr(TextItem, "set_text",
+                        lambda self, text, family="x", *a, **k: real_set(self, text, "Poppins", *a, **k))
+    monkeypatch.setattr(TextItem, "add_paragraphs",
+                        lambda self, text, family="x", *a, **k: real_add(self, text, "Poppins", *a, **k))
+    for key in KEYS:
+        doc = templates.build(key)
+        for sc in doc.pages:
+            for it in sc.all_design_items():
+                if isinstance(it, TextItem):
+                    assert not it.overflow, f"{key}: {it.display_name()} overflows"

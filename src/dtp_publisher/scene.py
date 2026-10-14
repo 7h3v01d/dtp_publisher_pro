@@ -158,6 +158,7 @@ class PageScene(QGraphicsScene):
         self.rendering = False
         self.preview = False        # thumbnails: hide aids but still show empty photo frames
         self.zoom = 1.0
+        self._wrap_pending = False
         self.guides: List[GuideItem] = []
         self._snap_lines: List[QLineF] = []
         self._move: Optional[_MoveState] = None
@@ -185,6 +186,25 @@ class PageScene(QGraphicsScene):
     def content_changed(self):
         if self.doc is not None:
             self.doc.pageContentChanged.emit(self)
+
+    # ── text wrap ─────────────────────────────────────────────────────────────
+    def wrap_dirty(self):
+        """Something that text flows around moved: re-flow once the current event
+        (a drag step, an undo, loading a page) is over."""
+        if not self._wrap_pending:
+            self._wrap_pending = True
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, self.flush_wrap)
+
+    def flush_wrap(self):
+        """Re-flow every text box on this page whose obstacles changed."""
+        if not self._wrap_pending:
+            return
+        self._wrap_pending = False
+        from .items.text import TextItem
+        for it in self.all_design_items():
+            if isinstance(it, TextItem):
+                it.refresh_wrap()
 
     def view_options_changed(self):
         show = self.doc.view.show_guides if self.doc is not None else True

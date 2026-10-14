@@ -42,6 +42,7 @@ def rendering(scene: PageScene, end_edits: bool = True):
         for it in scene.all_design_items():
             if isinstance(it, TextItem) and it.editing:
                 it.end_edit()
+    scene.flush_wrap()
     old = scene.rendering
     scene.rendering = True
     scene.set_snap_lines([])

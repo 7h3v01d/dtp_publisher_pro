@@ -27,6 +27,9 @@ from ..geometry import (Geo, geo_from_local_rect, normalize_angle, parent_to_loc
 HANDLE_PX = 11.0      # handle size in screen pixels (large for easier grabbing)
 ROT_PX = 30.0         # distance of the rotate knob above the box, screen px
 
+WRAP_MODES = {"none": "No wrapping", "square": "Square", "top_bottom": "Top and bottom"}
+WRAP_GAP = 4.0        # space kept between wrapped text and the object (pt)
+
 STROKE_STYLES = {
     "solid": Qt.PenStyle.SolidLine,
     "dash": Qt.PenStyle.DashLine,
@@ -114,6 +117,7 @@ class BaseItem(QGraphicsObject):
         self.hidden = False
         self.flip_h = False
         self.flip_v = False
+        self.wrap = "none"            # how text in boxes *behind* this object flows round it
         self._drag: Optional[_Drag] = None
         self.setFlags(
             QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
@@ -169,6 +173,8 @@ class BaseItem(QGraphicsObject):
         self.on_resized()
         self.update()
         self.geometryChanged.emit()
+        if self.affects_wrap():
+            self.notify_wrap()
 
     def scene_box(self) -> QRectF:
         """Axis-aligned bounds of the object (without handles) in scene space."""
@@ -201,6 +207,11 @@ class BaseItem(QGraphicsObject):
         if key == "geometry":
             self.set_geometry(value)
             return
+        if key == "wrap":
+            self.wrap = value if value in WRAP_MODES else "none"
+            self.notify_wrap()
+            self.on_prop_changed(key)
+            return
         if isinstance(getattr(self, key, None), QColor):
             value = QColor(value)
         setattr(self, key, value)
@@ -209,6 +220,17 @@ class BaseItem(QGraphicsObject):
 
     def on_prop_changed(self, key: str):
         """Hook for subclasses."""
+
+    # ── text wrap ────────────────────────────────────────────────────────────
+    def affects_wrap(self) -> bool:
+        """Text boxes behind this object flow around it."""
+        return getattr(self, "wrap", "none") != "none"
+
+    def notify_wrap(self, scene=None):
+        """Ask the page to re-check how its text flows (done once, soon after)."""
+        sc = scene if scene is not None else self.page_scene()
+        if sc is not None and hasattr(sc, "wrap_dirty"):
+            sc.wrap_dirty()
 
     @property
     def opacity_value(self) -> float:
@@ -234,6 +256,7 @@ class BaseItem(QGraphicsObject):
             "hidden": self.hidden,
             "flip_h": self.flip_h,
             "flip_v": self.flip_v,
+            "wrap": self.wrap,
         }
         d.update(self.extra_to_dict())
         return d
@@ -252,6 +275,8 @@ class BaseItem(QGraphicsObject):
         self.setOpacity(num(d, "opacity", 1.0, 0.0, 1.0))
         self.flip_h = bool(d.get("flip_h", False))
         self.flip_v = bool(d.get("flip_v", False))
+        w = d.get("wrap", "none")        # files from before 5.2 never wrapped text
+        self.wrap = w if w in WRAP_MODES else "none"
         self.setZValue(num(d, "z", 1.0))
         self.apply_extra(d)
         self.set_geometry(Geo(num(d, "x", 0), num(d, "y", 0),
@@ -609,7 +634,24 @@ class BaseItem(QGraphicsObject):
         self.set_geometry(d.start_geo._replace(rot=normalize_angle(ang)))
 
     # ── misc ─────────────────────────────────────────────────────────────────
+    _WRAP_CHANGES = (QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged,
+                     QGraphicsItem.GraphicsItemChange.ItemRotationHasChanged,
+                     QGraphicsItem.GraphicsItemChange.ItemTransformHasChanged,
+                     QGraphicsItem.GraphicsItemChange.ItemZValueHasChanged,
+                     QGraphicsItem.GraphicsItemChange.ItemVisibleHasChanged,
+                     QGraphicsItem.GraphicsItemChange.ItemParentHasChanged,
+                     QGraphicsItem.GraphicsItemChange.ItemSceneHasChanged)
+
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
             self.prepareGeometryChange()   # shape grows/shrinks by the handles
+        elif change == QGraphicsItem.GraphicsItemChange.ItemSceneChange:
+            if self.affects_wrap():
+                self.notify_wrap(self.scene())          # leaving: the old page re-flows
+        elif change in self._WRAP_CHANGES:
+            if self.affects_wrap() or self._is_text_box():
+                self.notify_wrap()
         return super().itemChange(change, value)
+
+    def _is_text_box(self) -> bool:
+        return self.KIND == "text"

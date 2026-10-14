@@ -31,7 +31,9 @@ from PyQt6.QtWidgets import QGraphicsTextItem, QStyle, QStyleOptionGraphicsItem
 from .. import theme
 from ..commands import TextCmd
 from ..geometry import geo_from_local_rect
-from .base import BaseItem, color_from, color_to_str, num
+from .base import WRAP_GAP, BaseItem, color_from, color_to_str, num
+from .flowlayout import INF, Region, install as install_flow
+from .richtext import OBJECT_CHAR, flatten as flatten_rich_text
 
 FIT_MODES = {"none": "Do not autofit", "shrink": "Shrink text on overflow",
              "best": "Best fit", "grow": "Grow text box to fit"}
@@ -141,6 +143,7 @@ class TextItem(BaseItem):
         self._scale = 1.0
         self._edit_html = ""
         self._refitting = False
+        self._fit_excl: List[QRectF] = []
         self.link_next: Optional["TextItem"] = None
         self.link_prev: Optional["TextItem"] = None
         self._pending_next = ""                       # uid to link to after loading
@@ -152,6 +155,8 @@ class TextItem(BaseItem):
         doc = QTextDocument(self)
         self._own_doc = doc
         doc.documentLayout().setPaintDevice(layout_device())
+        install_flow(doc)                 # flows round pictures, through linked boxes
+        self._wrap_key = ()
         doc.setUseDesignMetrics(True)
         doc.setDocumentMargin(0)
         opt = doc.defaultTextOption()
@@ -161,6 +166,9 @@ class TextItem(BaseItem):
         self._ti.setDocument(doc)
         self._ti.setDefaultTextColor(self.text_color)
         self._set_block_defaults()
+        self._model_dirty = False
+        self._flattening = False
+        doc.contentsChange.connect(self._note_change)
         doc.contentsChanged.connect(self._on_contents_changed)
         self.refit()
 
@@ -265,10 +273,66 @@ class TextItem(BaseItem):
         r = self.rect()
         return QRectF((r.left() - tl.x()) / s, (r.top() - tl.y()) / s, r.width() / s, r.height() / s)
 
+    # ── text wrap ────────────────────────────────────────────────────────────
+    def wrap_exclusions(self) -> List[QRectF]:
+        """Rectangles (in this box's coordinates) that the text must flow round:
+        the objects in front of this box that are set to wrap text."""
+        sc = self.page_scene()
+        if sc is None:
+            return []
+        frame = self.rect()
+        out = []
+        ancestors = set()
+        p = self.parentItem()
+        while p is not None:
+            ancestors.add(id(p))
+            p = p.parentItem()
+        for it in sc.items(Qt.SortOrder.DescendingOrder):      # front to back
+            if it is self:
+                break                                         # the rest are behind us
+            if not isinstance(it, BaseItem) or id(it) in ancestors or not it.isVisible():
+                continue
+            if it.KIND == "group" or getattr(it, "wrap", "none") == "none":
+                continue
+            r = it.mapToItem(self, it.rect()).boundingRect()
+            r = r.adjusted(-WRAP_GAP, -WRAP_GAP, WRAP_GAP, WRAP_GAP)
+            if not r.intersects(frame):
+                continue
+            if it.wrap == "top_bottom":
+                r = QRectF(-1e5, r.top(), 2e5, r.height())
+            out.append(r)
+        return out
+
+    @staticmethod
+    def _key(rects: List[QRectF]):
+        return tuple((round(r.x(), 2), round(r.y(), 2), round(r.width(), 2), round(r.height(), 2))
+                     for r in rects)
+
+    def refresh_wrap(self):
+        """Re-flow if the objects this box flows round have changed."""
+        if self.is_linked():
+            self.chain_root().layout_chain()
+            return
+        if self._key(self.wrap_exclusions()) != self._wrap_key:
+            self.refit()
+
+    def _set_flow(self, scale: float, inner: QRectF, excl: List[QRectF]):
+        """Tell the layout the text width (and holes), in the text's own units."""
+        lay = self._own_doc.documentLayout()
+        w = max(inner.width() / scale, 1.0)
+        if excl:
+            holes = [QRectF((r.left() - inner.left()) / scale, (r.top() - inner.top()) / scale,
+                            r.width() / scale, r.height() / scale) for r in excl]
+            lay.set_regions([Region(w, INF, holes)])
+        else:
+            lay.set_regions(None)
+            self._ti.setTextWidth(w)
+
     def _height_at(self, scale: float, inner_w: float) -> float:
-        doc = self.document
-        doc.setTextWidth(max(inner_w / scale, 1.0))
-        return doc.size().height() * scale
+        inner = self.inner_rect()
+        self._set_flow(scale, QRectF(inner.left(), inner.top(), inner_w, inner.height()),
+                       self._fit_excl)
+        return self.document.size().height() * scale
 
     def _fit_scale(self, inner: QRectF) -> float:
         if self.is_empty():
@@ -295,6 +359,9 @@ class TextItem(BaseItem):
         self._refitting = True
         try:
             inner = self.inner_rect()
+            excl = self.wrap_exclusions()
+            self._wrap_key = self._key(excl)
+            self._fit_excl = excl
             s = 1.0
             if self.fit in ("best", "shrink"):
                 s = self._fit_scale(inner)
@@ -302,7 +369,7 @@ class TextItem(BaseItem):
                     s = min(1.0, s)
             self._scale = s
             self._ti.setScale(s)
-            self._ti.setTextWidth(max(inner.width() / s, 1.0))
+            self._set_flow(s, inner, excl)
             text_h = self.document.size().height() * s
             if self.fit == "grow":
                 need = max(self.MIN_H, text_h + 2 * inner.top())
@@ -312,7 +379,7 @@ class TextItem(BaseItem):
                     self.set_geometry(geo_from_local_rect(g, QRectF(0, 0, g.w, need)))
                     inner = self.inner_rect()
             off = 0.0
-            if text_h < inner.height():
+            if text_h < inner.height() and not excl:   # holes are fixed to the box
                 if self.valign == "middle":
                     off = (inner.height() - text_h) / 2
                 elif self.valign == "bottom":
@@ -331,8 +398,29 @@ class TextItem(BaseItem):
         elif key == "text_color":
             self._ti.setDefaultTextColor(self.text_color)
 
+    def _note_change(self, pos: int, removed: int, added: int):
+        """Something arrived that the story model may not support (see richtext)."""
+        if self._flattening or not added:
+            return
+        doc = self._own_doc
+        if doc.rootFrame().childFrames():
+            self._model_dirty = True
+            return
+        c = QTextCursor(doc)
+        c.setPosition(min(pos, doc.characterCount() - 1))
+        c.setPosition(min(pos + added, doc.characterCount() - 1), QTextCursor.MoveMode.KeepAnchor)
+        if OBJECT_CHAR in c.selectedText():
+            self._model_dirty = True
+
     def _on_contents_changed(self):
         # fired by this item's *own* document, i.e. when it is a story's owner
+        if self._model_dirty and not self._flattening:
+            self._model_dirty = False
+            self._flattening = True
+            try:
+                flatten_rich_text(self._own_doc)      # tables, frames, pictures pasted in
+            finally:
+                self._flattening = False
         if self.is_linked():
             self.layout_chain()
             for f in self.chain():
@@ -403,28 +491,49 @@ class TextItem(BaseItem):
             b = b.next()
         return spans
 
+    _defer_layout = 0      # >0 while many links are being made at once (see textflow)
+
     def layout_chain(self):
-        """Flow the story through the live boxes of the chain (call on the root)."""
+        """Flow the story through the live boxes of the chain (call on the root).
+
+        Each box is a region of the story's layout (its own width, height and the
+        objects it flows round); the layout stacks the regions, and each box shows
+        its own band of the document."""
+        if TextItem._defer_layout:
+            return
         frames = self.live_chain()
         if not frames:
             return
         doc = self._own_doc
-        doc.setTextWidth(max(frames[0].inner_rect().width(), 1.0))
-        lines = self._line_spans(doc)
-        k, offset, pos = 0, 0.0, 0
+        lay = doc.documentLayout()
+        regions = []
         for f in frames:
+            inner = f.inner_rect()
+            excl = f.wrap_exclusions()
+            f._wrap_key = self._key(excl)
+            holes = [r.translated(-inner.left(), -inner.top()) for r in excl]
+            regions.append(Region(max(inner.width(), 1.0), max(inner.height(), 1.0), holes))
+        lay.set_regions(regions)
+        tops = lay.region_tops()
+        lines = self._line_spans(doc)
+        k = 0
+        for i, f in enumerate(frames):
             f._scale = 1.0
             f._ti.setScale(1.0)
             inner = f.inner_rect()
-            start, end = offset, offset + inner.height()
-            cut, first, last = start, pos, pos
-            while k < len(lines) and lines[k][1] <= end + 0.5:
-                cut, last = lines[k][1], lines[k][3]
+            start = tops[i]
+            end = start + regions[i].height
+            cut, first, last = start, None, None
+            while k < len(lines) and lines[k][0] < end - 0.5 and \
+                    (i == len(frames) - 1 or lines[k][0] < tops[i + 1] - 0.5):
+                if lines[k][1] > end + 0.5 and first is not None:
+                    break            # doesn't fit (last box); a box's first line always shows
+                cut = max(cut, lines[k][1])
+                first = lines[k][2] if first is None else first
+                last = lines[k][3]
                 k += 1
-            if cut == start and k < len(lines) and inner.height() >= 4:
-                # a single line taller than the box: show it rather than stall
-                cut, last = lines[k][1], lines[k][3]
-                k += 1
+            if first is None:
+                first = last = lines[k][2] if k < len(lines) else doc.characterCount() - 1
             f._slice = (start, cut)
             f._slice_pos = (first, last)
             f._ti.setPos(inner.left(), inner.top() - start)
@@ -432,10 +541,6 @@ class TextItem(BaseItem):
             f.prepareGeometryChange()
             f.update()
             f._ti.update()
-            if k < len(lines):
-                offset, pos = lines[k][0], lines[k][2]
-            else:
-                offset, pos = cut + 1e6, doc.characterCount()
         frames[-1].overflow = k < len(lines)
 
     def slice_html(self) -> str:

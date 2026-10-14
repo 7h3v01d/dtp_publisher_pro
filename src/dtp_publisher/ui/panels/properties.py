@@ -137,6 +137,12 @@ class PropertiesPanel(QWidget):
         row.addWidget(self.sl_op, 1)
         row.addWidget(self.lbl_op)
         f.addRow("Transparency:", row)
+        from ...items.base import WRAP_MODES
+        self.cmb_wrap = _combo(WRAP_MODES)
+        self.cmb_wrap.setToolTip("How text in boxes behind this object flows round it")
+        self.cmb_wrap.currentIndexChanged.connect(
+            lambda _: self._prop("wrap", self.cmb_wrap.currentData(), text="Wrap text"))
+        f.addRow("Text wrap:", self.cmb_wrap)
         v.addWidget(self.g_style)
 
         # text ---------------------------------------------------------------
@@ -313,6 +319,8 @@ class PropertiesPanel(QWidget):
         op = round((1 - it.opacity()) * 100)
         self._quiet(self.sl_op, lambda: self.sl_op.setValue(op))
         self.lbl_op.setText(f"{op}%")
+        _set_combo(self.cmb_wrap, getattr(it, "wrap", "none"))
+        self.cmb_wrap.setEnabled(it.KIND != "group")
         if isinstance(it, TextItem):
             _set_combo(self.cmb_fit, it.fit)
             self.cmb_fit.setEnabled(not it.is_linked())

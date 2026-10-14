@@ -8,8 +8,6 @@ Python 3.11+ · PyQt6 · Windows (also runs on Linux/macOS) · Apache 2.0
 
 ---
 
-<img width="1920" height="1040" alt="screenshot" src="screenshot.png" />
-
 ## Starting it
 
 **Easiest (for someone else's PC):** on your own PC run **`build_exe.bat`**
@@ -78,8 +76,19 @@ drag it onto the window). This needs the free
 [LibreOffice](https://www.libreoffice.org/download/download-libreoffice/)
 installed; it reads the file in the background and you never see it. Big
 files can take a minute. Check the result over: fonts and spacing can differ a
-little, and text doesn't wrap around pictures yet. Your `.pub` file is not
+little. Your `.pub` file is not
 changed; **Save** makes a new `.dtpub` file next to it.
+
+**Text around pictures.** Put a picture over a text box and the text flows
+around it. To change that, select the picture and use **Arrange ▸ Text wrap**
+(No Wrapping, Wrap Square, Wrap Top and Bottom), or right-click it. Any object
+can be set to wrap text, including another text box.
+
+**Pasting text.** Text pasted from Word, a web page or an email keeps its
+fonts and paragraphs. Tables become rows of text separated by tabs, and
+pictures in the pasted text are left out — add them with **Insert ▸ Picture**,
+so they can be moved and wrapped like any other picture. A very large paste
+(more than 5,000 tables or boxes, or 20,000 pictures) comes in as plain text.
 
 **Text that carries on.** For newsletters, select a text box and choose
 **Insert ▸ Continue Text…**, then click an empty text box (on any page). Text
@@ -121,7 +130,9 @@ src/dtp_publisher/
   scene.py          PageScene (one QGraphicsScene per page), guides, snapping, group moves
   commands.py       every undoable change (items, text, guides, pages, page setup)
   geometry.py       pure maths: Geo(x, y, w, h, rot), local<->parent mapping
-  items/            BaseItem + text, picture, shape, drawing (path), table, WordArt, group
+  items/            BaseItem + text, picture, shape, drawing (path), table, WordArt, group;
+                    flowlayout.py lays text out (regions for linked boxes, holes for wrap);
+                    richtext.py keeps pasted text within what a text box supports
   textflow.py       linked text boxes: connect / disconnect (undoable), reload links
   labels.py         label-sheet layouts (Avery presets) and the page → cell plan
   importers/        .pub import: libreoffice.py (find + run headless), odg.py
@@ -161,7 +172,8 @@ run_tests.bat            (or: python -m pytest -q   with QT_QPA_PLATFORM=offscre
 revert_proofs.bat        (or: python tools/revert_proofs.py)
 ```
 
-About 210 tests run headless in about 15 seconds. `tests/test_adversarial_limits.py`
+About 670 tests (including 400 random wrap layouts) run headless in about 25 seconds. `python tools/benchmark.py`
+measures a large ordinary publication (100 pages, 150 photos). `tests/test_adversarial_limits.py`
 and `tests/test_autosave_races.py` cover hostile and oversized input and the
 autosave/save races; resource limits are all in `src/dtp_publisher/limits.py`. The importer tests use
 synthetic ODG/WMF data; to also run real Publisher files, point

@@ -225,6 +225,7 @@ class OdgImporter:
         if len(self.zip.infolist()) > limits.MAX_ODG_ENTRIES:
             raise limits.TooBig("The converted file has too many parts to open.")
         self._picture_bytes = 0          # uncompressed bytes read so far (budget)
+        self._page_path_chars = 0        # drawing detail on the current page (budget)
         self._objects = 0
         self.content = self._xml("content.xml")
         styles_root = self._xml("styles.xml", required=False)
@@ -296,6 +297,7 @@ class OdgImporter:
                 st["background"] = bg.name(QColor.NameFormat.HexArgb)
                 sc.apply_setup(st)
             doc.add_page(sc)
+            self._page_path_chars = 0
             z = 1.0
             master_el = self.styles.masters.get(master, ("", None))[1]
             sources = ([(c, True) for c in master_el] if master_el is not None else []) + \
@@ -312,10 +314,45 @@ class OdgImporter:
                 sc.addItem(item)
         if not doc.pages:
             doc.add_page(doc.make_page())
+        from ..items.path import limit_page_drawings
+        blocked = sum(limit_page_drawings(sc.all_design_items()) for sc in doc.pages)
+        if blocked:
+            self.report.warn(f"{blocked} very detailed drawing(s) are shown as boxes, "
+                             "because drawing them would make the program very slow.")
         self.report.pages = len(doc.pages)
+        for sc in doc.pages:
+            self._set_wrapping(sc)
         self._relink_stories()
         self.zip.close()
         return doc
+
+    @staticmethod
+    def _set_wrapping(sc) -> None:
+        """Publisher flows text round pictures and text boxes in front of it.  The
+        wrap settings don't survive LibreOffice's conversion, so: pictures and text
+        boxes wrap ("Square") unless they mostly cover a text box behind them (then
+        they were decoration, set to "None" in Publisher), and anything from the
+        master page never wraps."""
+        from PyQt6.QtCore import Qt as _Qt
+        order = {id(i): n for n, i in enumerate(sc.items(_Qt.SortOrder.DescendingOrder))}
+        items = [i for i in sc.all_design_items() if i.KIND in ("image", "text")]
+        texts = [i for i in items if i.KIND == "text"]
+        for it in items:
+            if it.locked:                      # master-page background
+                it.wrap = "none"
+                continue
+            box = it.scene_box()
+            covers = False
+            for t in texts:
+                if t is it or order.get(id(t), 0) <= order.get(id(it), 0):
+                    continue                    # only boxes *behind* this one count
+                tb = t.scene_box()
+                inter = box.intersected(tb)
+                area = max(tb.width() * tb.height(), 1e-6)
+                if inter.width() * inter.height() > 0.6 * area:
+                    covers = True
+                    break
+            it.wrap = "none" if covers else "square"
 
     def _page_background(self, page: ET.Element) -> Optional[QColor]:
         gp = self.styles.props("drawing-page", page.get(q("draw:style-name")),
@@ -528,7 +565,12 @@ class OdgImporter:
         tr = QTransform()
         tr.scale(1 / box.width(), 1 / box.height())
         tr.translate(-box.left(), -box.top())
-        it = PathItem(box.width(), box.height(), path_to_svg(tr.map(path)))
+        d = path_to_svg(tr.map(path))
+        if (len(d) > limits.MAX_PATH_CHARS
+                or self._page_path_chars + len(d) > limits.MAX_PAGE_PATH_CHARS):
+            raise limits.TooBig("a drawing too detailed to show")
+        self._page_path_chars += len(d)
+        it = PathItem(box.width(), box.height(), d)
         it.closed = closed
         self._apply_line_fill(it, gp, closed)
         it.set_geometry(Geo(box.left(), box.top(), box.width(), box.height(), rot))
@@ -822,6 +864,11 @@ class OdgImporter:
 
     # ── linked stories ───────────────────────────────────────────────────────
     def _relink_stories(self):
+        from ..textflow import deferred_layout
+        with deferred_layout(lambda: [t for t, *_ in self._frames]):
+            self._relink_stories_now()
+
+    def _relink_stories_now(self):
         from ..textflow import connect
         groups: Dict[str, List[Tuple[TextItem, int, float, float]]] = {}
         for entry in self._frames:

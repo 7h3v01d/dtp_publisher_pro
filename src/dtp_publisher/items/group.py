@@ -29,6 +29,12 @@ class GroupItem(BaseItem):
     def display_name(self) -> str:
         return self.name or f"Group ({len(self.members())} objects)"
 
+    def affects_wrap(self) -> bool:
+        return any(m.affects_wrap() for m in self.members())
+
+    def _is_text_box(self) -> bool:
+        return any(m._is_text_box() for m in self.members())
+
     def members(self) -> List[BaseItem]:
         return sorted((c for c in self.childItems() if isinstance(c, BaseItem)),
                       key=lambda c: c.zValue())

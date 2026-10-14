@@ -65,7 +65,7 @@ class Page:
         if fill:
             t.fill = QColor(fill)
         self._place(t, x, y, w, h)
-        t.refit()
+        _no_overflow(t)
         return self._add(t)
 
     def story(self, x, y, w, h, heading, body, hsize=16.0, bsize=11.0, family="Calibri",
@@ -77,7 +77,7 @@ class Page:
                          space_after=mm(1.5))
         t.fit = fit
         self._place(t, x, y, w, h)
-        t.refit()
+        _no_overflow(t)
         return self._add(t)
 
     def shape(self, kind, x, y, w, h, fill="#5b9bd5", stroke=None, sw=0.0, radius=4.0,
@@ -136,6 +136,17 @@ class Page:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+def _no_overflow(t: TextItem) -> None:
+    """Fonts differ between computers (Windows' Calibri has a taller line than the
+    Carlito that stands in for it elsewhere), so a box sized snugly on one can
+    overflow on another.  A template box that overflows here is set to shrink
+    its text just enough, so every design opens without overflow markers."""
+    t.refit()
+    if t.overflow and t.fit == "none":
+        t.fit = "shrink"
+        t.refit()
+
+
 def flyer(doc: Document):
     acc, dark = "#c0392b", "#2c1810"
     p = Page(doc, 210, 297, background="#fffaf3", margins_mm=15)
@@ -333,7 +344,8 @@ def photo_album(doc: Document):
     for r in range(2):
         for c in range(2):
             x, y = 12 + c * (w + 13), 10 + r * (h + 15)
-            p2.picture(x, y, w, h, border="#ffffff", bw=4, rot=(-2 if (r + c) % 2 else 2))
+            ph = p2.picture(x, y, w, h, border="#ffffff", bw=4, rot=(-2 if (r + c) % 2 else 2))
+            ph.wrap = "none"           # tilted photos reach over their captions
             p2.text(x, y + h + 3, w, 9, "Caption", 11, "Georgia", italic=True,
                     color="#5a4a42", align="center")
 

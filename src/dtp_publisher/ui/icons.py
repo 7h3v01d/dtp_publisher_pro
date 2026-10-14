@@ -468,6 +468,23 @@ def _lock(d):
     d.p.drawPath(p)
 
 
+def _wrap(kind):
+    """Text lines around a small picture (none / square / top and bottom)."""
+    def f(d):
+        pic = (9, 8, 7, 7)
+        d.rect(*pic, fill=_soft(d.ac, 140))
+        d.pen(d.fg, 1.5)
+        for y in (4, 8, 11.5, 15, 19):
+            beside = pic[1] - 1 <= y <= pic[1] + pic[3] + 1
+            if kind == "none" or not beside:
+                d.line(3, y, 21, y)
+            elif kind == "square":
+                d.line(3, y, 7, y, 18, y, 21, y)
+        if kind == "none":
+            d.rect(*pic, fill=_soft(d.ac, 140))
+    return f
+
+
 def _zoom(kind):
     def f(d):
         d.circle(10, 10, 6.5)
@@ -674,7 +691,8 @@ ICONS: Dict[str, Callable] = {
     "align_vcenter": _align("vcenter"), "align_bottom": _align("bottom"),
     "dist_h": _dist("h"), "dist_v": _dist("v"), "rotate_left": _rotate("left"),
     "rotate_right": _rotate("right"), "flip_h": _flip("h"), "flip_v": _flip("v"),
-    "lock": _lock, "zoom_in": _zoom("in"), "zoom_out": _zoom("out"),
+    "lock": _lock, "wrap_none": _wrap("none"), "wrap_square": _wrap("square"),
+    "wrap_top_bottom": _wrap("top_bottom"), "zoom_in": _zoom("in"), "zoom_out": _zoom("out"),
     "zoom_fit": _zoom("fit"), "zoom_100": _zoom("100"), "grid": _grid, "guides": _guides,
     "boundaries": _boundaries, "snap": _snap, "theme": _theme, "settings": _settings,
     "help": _help, "templates": _templates, "recent": _recent, "close": _close,

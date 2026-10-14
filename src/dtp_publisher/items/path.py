@@ -13,8 +13,8 @@ import re
 from typing import Any, Dict, List, Tuple
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import (QBrush, QColor, QLinearGradient, QPainter, QPainterPath,
-                         QPainterPathStroker, QTransform)
+from PyQt6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath,
+                         QPainterPathStroker, QPen, QTransform)
 
 from .base import BaseItem, color_from, color_to_str, num
 
@@ -200,12 +200,37 @@ class PathItem(BaseItem):
         self.grad_angle = 90.0
         self._cache_key = None
         self._cache = QPainterPath()
+        self._density = 0.0
+        self.too_detailed = False       # set by limit_page_drawings (the page's budget)
 
     def unit_path(self) -> QPainterPath:
         if self._cache_key != self.d:
             self._cache = parse_svg_path(self.d)
             self._cache_key = self.d
+            self._density = edge_density(self._cache)
         return self._cache
+
+    def density(self) -> float:
+        self.unit_path()
+        return self._density
+
+    def detail(self) -> str:
+        """How this drawing is shown: 'smooth', 'plain' (no antialiasing) or 'box'.
+
+        Qt's antialiased drawing costs roughly (edges crossed per row) × (rows), so
+        a hostile outline can take minutes to draw.  Very dense outlines are drawn
+        without smoothing, and beyond that as a labelled box; the drawing itself
+        is kept unchanged in the file either way."""
+        from .. import limits
+        d = self.density()
+        if self.too_detailed or d > limits.MAX_DRAW_DENSITY:
+            return "box"
+        if self.is_rendering():                   # printing / PDF: one-off, may take a while
+            return "plain" if d > limits.MAX_SMOOTH_DENSITY else "smooth"
+        return "smooth" if self in _screen_smooth_set(self.page_scene()) else "plain"
+
+    def fills(self) -> bool:
+        return self.closed and self.fill.alpha() > 0
 
     def path(self) -> QPainterPath:
         t = QTransform()
@@ -213,8 +238,12 @@ class PathItem(BaseItem):
         return t.map(self.unit_path())
 
     def hit_path(self) -> QPainterPath:
+        if self.detail() == "box":
+            p = QPainterPath()
+            p.addRect(self.rect())
+            return p
         p = self.path()
-        if not self.closed or self.fill.alpha() == 0:
+        if not self.fills():
             s = QPainterPathStroker()
             s.setWidth(max(self.stroke_width, 8 / self._zoom()))
             out = s.createStroke(p)
@@ -224,9 +253,13 @@ class PathItem(BaseItem):
         return p
 
     def paint_content(self, p: QPainter):
-        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        detail = self.detail()
+        if detail == "box":
+            self._paint_too_detailed(p)
+            return
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, detail == "smooth")
         path = self.path()
-        if self.closed and self.fill.alpha():
+        if self.fills():
             if self.fill2.alpha():
                 a = math.radians(self.grad_angle)
                 c = QPointF(self._w / 2, self._h / 2)
@@ -244,6 +277,24 @@ class PathItem(BaseItem):
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawPath(path)
 
+    def _paint_too_detailed(self, p: QPainter):
+        r = self.rect()
+        c = QColor(self.fill if self.fills() else self.stroke)
+        c.setAlpha(60)
+        p.fillRect(r, c)
+        pen = QPen(QColor(120, 120, 120), 1.0, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        p.setPen(pen)
+        p.drawRect(r)
+        if self.is_rendering():
+            return
+        f = QFont()
+        f.setPointSizeF(max(min(9.0 / self._zoom(), r.height() / 5), 1.0))
+        p.setFont(f)
+        p.setPen(QColor(70, 70, 70))
+        p.drawText(r, Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+                   "Drawing too detailed to show")
+
     def on_prop_changed(self, key: str):
         if key == "d":
             self._cache_key = None
@@ -253,11 +304,82 @@ class PathItem(BaseItem):
                 "grad_angle": self.grad_angle}
 
     def apply_extra(self, d: Dict[str, Any]):
-        self.d = str(d.get("d", self.d))[:4_000_000]
+        from .. import limits
+        self.d = str(d.get("d", self.d))[:limits.MAX_PATH_CHARS]
         self.closed = bool(d.get("closed", True))
         self.fill2 = color_from(d.get("fill2"), self.fill2)
         self.grad_angle = num(d, "grad_angle", 90.0, -360, 360)
         self._cache_key = None
+
+
+def edge_density(path: QPainterPath) -> float:
+    """Average number of edges a horizontal line crosses: what drawing costs.
+
+    The sum of every edge's vertical extent over the height: a circle is 2, a
+    line of text turned into outlines about 90, a zig-zag of 1,000 edges about
+    1,000.  Curves are flattened first.
+    """
+    h = path.boundingRect().height()
+    if h <= 0:
+        return 0.0
+    total = 0.0
+    for poly in path.toSubpathPolygons():
+        prev = None
+        for i in range(poly.count()):
+            y = poly[i].y()
+            if prev is not None:
+                total += abs(y - prev)
+            prev = y
+    return total / h
+
+
+def _screen_smooth_set(scene) -> set:
+    """The drawings on a page that are smoothed on screen at the current zoom.
+
+    Smoothed drawing costs about density × zoom² (the pen widens too), so the page
+    shares one allowance, given out from the back to the front.  Worked out once
+    per zoom level and page contents."""
+    from .. import limits
+    if scene is None:
+        return set()
+    items = [i for i in scene.items() if isinstance(i, PathItem)]
+    z = max(getattr(scene, "zoom", 1.0), 1.0)
+    key = (round(z, 3), len(items), sum(id(i) for i in items))
+    cached = getattr(scene, "_smooth_cache", None)
+    if cached is not None and cached[0] == key:
+        return cached[1]
+    allowed, left = set(), limits.MAX_SCREEN_SMOOTH_WORK
+    for it in sorted(items, key=lambda i: i.zValue()):
+        if it.too_detailed or len(allowed) >= limits.MAX_SMOOTH_DRAWINGS_PER_PAGE:
+            continue
+        if it.density() <= limits.ALWAYS_SMOOTH_DENSITY:   # rectangles, circles, rings
+            allowed.add(it)
+            continue
+        work = it.density() * z * z
+        if it.density() <= limits.MAX_SMOOTH_DENSITY and work <= left:
+            allowed.add(it)
+            left -= work
+    scene._smooth_cache = (key, allowed)
+    return allowed
+
+
+def limit_page_drawings(items) -> int:
+    """Once a page's drawings add up to too much work, show the rest as boxes.
+
+    Returns how many drawings are shown as boxes (their data is unchanged)."""
+    from .. import limits
+    budget = limits.MAX_PAGE_DENSITY
+    boxed = 0
+    for it in sorted((i for i in items if isinstance(i, PathItem)), key=lambda i: i.zValue()):
+        it.too_detailed = False
+        dens = it.density()
+        if dens > limits.MAX_DRAW_DENSITY or dens > budget:
+            it.too_detailed = True
+            boxed += 1
+        else:
+            budget -= dens
+        it.update()
+    return boxed
 
 
 def unit_path_from(path: QPainterPath, box: QRectF) -> Tuple[str, QRectF]:

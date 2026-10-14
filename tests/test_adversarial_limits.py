@@ -411,3 +411,345 @@ def test_duplicate_uid_cannot_hijack_a_text_link(qapp):
     first, second, third = sorted(doc.text_items(), key=lambda t: t.geometry().y)
     assert first.link_next is second
     assert not third.is_linked() and third.plain_text() == "other"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 5.1.2 — second review (B1–B6) and the large-document benchmark
+# ═════════════════════════════════════════════════════════════════════════════
+def _write(tmp_path, data, name="d.dtpub"):
+    p = tmp_path / name
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return str(p)
+
+
+# ── B1. JSON structure is bounded before parsing ────────────────────────────
+def test_json_structure_refused_before_parsing(qapp, tmp_path, monkeypatch):
+    from dtp_publisher import limits, serialize
+    monkeypatch.setattr(limits, "MAX_JSON_NODES", 1000)
+    data = _doc_data()
+    data["view"] = {"junk": [{} for _ in range(2000)]}      # tiny file, big structure
+    path = _write(tmp_path, data)
+
+    def never(*a, **k):
+        raise AssertionError("json.loads ran on a file that should have been refused")
+    monkeypatch.setattr(serialize.json, "loads", never)
+    with pytest.raises(serialize.DocumentError, match="values"):
+        serialize.load_document(path)
+
+
+def test_json_structure_counts_only_outside_strings(qapp, tmp_path, monkeypatch):
+    from dtp_publisher import limits, serialize
+    monkeypatch.setattr(limits, "MAX_JSON_NODES", 300)
+    item = {"kind": "text", "x": 0, "y": 0, "w": 50, "h": 50,
+            "html": "<p>" + "a, b, {c} [d] \\" ' \\"q\\", ' * 400 + "</p>"}
+    path = _write(tmp_path, _doc_data(items_per_page=1, item=item))
+    doc, _ = serialize.load_document(path)                 # commas in text don't count
+    assert doc.text_items()
+
+
+def test_clipboard_structure_bomb_pastes_nothing(qapp, monkeypatch):
+    from dtp_publisher import limits
+    from dtp_publisher.serialize import items_from_clip
+    monkeypatch.setattr(limits, "MAX_JSON_NODES", 100)
+    raw = json.dumps({"format": "dtpub", "items": [], "junk": [[]] * 500}).encode()
+    assert items_from_clip(raw) == []
+
+
+# ── B2 and the benchmark: pictures in a .dtpub ──────────────────────────────
+def _big_png(w, h):
+    img = QImage(w, h, QImage.Format.Format_RGB32)
+    img.fill(QColor("#336699"))
+    from dtp_publisher.items.image import encode_image
+    return encode_image(img, "png")[0]
+
+
+def test_embedded_picture_budget_checked_before_decoding(qapp, tmp_path, monkeypatch):
+    from dtp_publisher import limits, serialize
+    from dtp_publisher.items import image as image_mod
+    b64 = base64.b64encode(_png()).decode()
+    monkeypatch.setattr(limits, "MAX_IMAGE_B64_CHARS", len(b64) - 1)
+    monkeypatch.setattr(image_mod.base64, "b64decode",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("decoded")))
+    path = _write(tmp_path, _doc_data(items_per_page=1, item=_image_item_dict(b64)))
+    with pytest.raises(serialize.DocumentError, match="picture"):
+        serialize.load_document(path)
+
+
+def test_total_embedded_pictures_budget(qapp, tmp_path, monkeypatch):
+    from dtp_publisher import limits, serialize
+    b64 = base64.b64encode(_png()).decode()
+    monkeypatch.setattr(limits, "MAX_TOTAL_IMAGE_B64_CHARS", len(b64) * 3)
+    path = _write(tmp_path, _doc_data(items_per_page=4, item=_image_item_dict(b64)))
+    with pytest.raises(serialize.DocumentError, match="pictures"):
+        serialize.load_document(path)
+
+
+def test_embedded_picture_beyond_pixel_limit_is_refused(qapp, monkeypatch):
+    """40 such pictures in a 10 MB file took 35 s and would have needed 10 GB."""
+    from dtp_publisher import limits
+    from dtp_publisher.serialize import item_from_dict
+    monkeypatch.setattr(limits, "MAX_EMBEDDED_PIXELS", 1000 * 1000)
+    warnings = []
+    it = item_from_dict(_image_item_dict(base64.b64encode(_big_png(1200, 1000)).decode()),
+                        warnings)
+    assert it is not None and not it.has_image()
+    assert any("1,200 × 1,000 pixels" in w for w in warnings)
+
+
+def test_huge_embedded_picture_is_never_decoded_full_size(qapp):
+    """A small file can hold an 8000 × 8000 picture; it is decoded at most at the
+    insert size (it used to be held at full size: 256 MB each)."""
+    from dtp_publisher.items.image import MAX_EMBED_PX
+    from dtp_publisher.serialize import item_from_dict
+    it = item_from_dict(_image_item_dict(base64.b64encode(_big_png(4000, 3000)).decode()))
+    assert it.has_image()
+    full = it.full_image()
+    assert max(full.width(), full.height()) <= MAX_EMBED_PX
+    assert abs(it.natural_aspect() - 4 / 3) < 0.01
+
+
+def test_pictures_keep_only_bytes_and_a_frame_sized_preview(qapp):
+    """150 photos used to need ~35 MB each (full decode + 1600 px preview)."""
+    from dtp_publisher.items import ImageItem
+    from dtp_publisher.items.image import read_image_bytes
+    data = _big_png(3000, 2250)
+    it = ImageItem(150, 112)
+    it.set_image_data(data, "png", "a.png", read_image_bytes(data))
+    held = [v for v in vars(it).values() if isinstance(v, QImage)]
+    assert held == []                                     # no decoded copy kept
+    assert max(it._preview.width(), it._preview.height()) <= 800
+    it.set_geometry(it.geometry()._replace(w=600, h=450))   # made much bigger
+    it._preview_ok()
+    assert max(it._preview.width(), it._preview.height()) > 800   # sharper preview made
+    img = it.full_image()                                  # printing gets every pixel
+    assert (img.width(), img.height()) == (3000, 2250)
+
+
+def test_preview_survives_save_and_reload_without_reencoding(qapp, tmp_path):
+    from dtp_publisher.items import ImageItem
+    from dtp_publisher.serialize import item_from_dict, item_to_dict
+    it = ImageItem(100, 75)
+    it.set_image_data(_png(), "png", "a.png")
+    d = item_to_dict(it)
+    back = item_from_dict(d)
+    assert back.has_image() and back.data == it.data
+    assert back.data_b64() is d["data"]                   # loaded text reused, not re-made
+
+
+# ── B3. Publisher source file ───────────────────────────────────────────────
+def test_pub_source_size_checked_before_copying(tmp_path, monkeypatch):
+    import tempfile
+    from dtp_publisher import limits
+    from dtp_publisher.importers import libreoffice
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "t"))
+    os.makedirs(tmp_path / "t")
+    src = tmp_path / "big.pub"
+    src.write_bytes(b"x" * 5000)
+    monkeypatch.setattr(limits, "MAX_PUB_SOURCE_BYTES", 1000)
+    monkeypatch.setattr(libreoffice, "_copy_capped",
+                        lambda *a: (_ for _ in ()).throw(AssertionError("copied")))
+    with pytest.raises(libreoffice.ConversionError, match="up to"):
+        libreoffice.convert(str(src), soffice="/bin/true")
+    assert os.listdir(tmp_path / "t") == []
+
+
+def test_failed_conversion_leaves_no_temp_folder(tmp_path, monkeypatch):
+    import tempfile
+    from dtp_publisher.importers import libreoffice
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "t"))
+    os.makedirs(tmp_path / "t")
+    src = tmp_path / "a.pub"
+    src.write_bytes(b"x" * 100)
+
+    def disk_full(*a):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(libreoffice, "_copy_capped", disk_full)
+    with pytest.raises(OSError):
+        libreoffice.convert(str(src), soffice="/bin/true")
+    assert os.listdir(tmp_path / "t") == []
+
+
+def test_libreoffice_temp_files_count_against_the_budget(tmp_path, monkeypatch):
+    if os.name == "nt":
+        pytest.skip("uses a shell script as a stand-in for LibreOffice")
+    from dtp_publisher import limits
+    from dtp_publisher.importers import libreoffice
+    fake = tmp_path / "soffice"
+    fake.write_text('#!/bin/sh\nhead -c 5000 /dev/zero > "$TMPDIR/scratch"\nsleep 6\n')
+    fake.chmod(0o755)
+    src = tmp_path / "a.pub"
+    src.write_bytes(b"x")
+    monkeypatch.setattr(limits, "MAX_CONVERT_DIR_BYTES", 1000)
+    with pytest.raises(libreoffice.ConversionError, match="too large"):
+        libreoffice.convert(str(src), soffice=str(fake), timeout=20)
+
+
+# ── B5. drawings ────────────────────────────────────────────────────────────
+def _random_path(n, seed=1):
+    import random
+    r = random.Random(seed)
+    return "M0 0" + "".join(f"L{r.random():.3f} {r.random():.3f}" for _ in range(n))
+
+
+def _path_page(d, count):
+    items = [{"kind": "path", "x": 0, "y": 0, "w": 500, "h": 500, "d": d, "uid": f"p{i}"}
+             for i in range(count)]
+    return _doc_data(items_per_page=0) | {"pages": [{"setup": {"width": 595, "height": 842},
+                                                      "items": items}]}
+
+
+def test_edge_density():
+    from dtp_publisher.items.path import edge_density, parse_svg_path
+    assert edge_density(parse_svg_path("M0 0L1 0L1 1L0 1Z")) == pytest.approx(2)
+    zig = parse_svg_path("M0 0" + "L1 1L0 0" * 50)
+    assert edge_density(zig) == pytest.approx(100)
+
+
+def test_drawing_detail_on_a_hostile_page(qapp):
+    """It took 382 s to draw one page of 20 dense drawings; now each drawing is
+    smoothed, drawn plain or shown as a box according to the page's allowance."""
+    from dtp_publisher import limits
+    from dtp_publisher.items import PathItem
+    from dtp_publisher.serialize import document_from_dict
+    doc, warnings = document_from_dict(_path_page(_random_path(1190), 20))   # density ≈ 390
+    paths = [i for i in doc.pages[0].all_design_items() if isinstance(i, PathItem)]
+    per = paths[0].density()
+    assert limits.MAX_SMOOTH_DENSITY > per > limits.MAX_SCREEN_SMOOTH_WORK
+    kinds = [p.detail() for p in paths]
+    assert "smooth" not in kinds                                    # too costly on screen
+    boxed = kinds.count("box")
+    assert boxed == len(paths) - int(limits.MAX_PAGE_DENSITY // per)
+    assert any("boxes" in w for w in warnings)
+
+
+def test_screen_smoothing_shares_one_allowance_per_page(qapp):
+    from dtp_publisher import limits
+    from dtp_publisher.items import PathItem
+    from dtp_publisher.serialize import document_from_dict
+    doc, _ = document_from_dict(_path_page(_random_path(100), 15))          # density ≈ 33
+    sc = doc.pages[0]
+    paths = [i for i in sc.all_design_items() if isinstance(i, PathItem)]
+    d = paths[0].density()
+    for zoom in (1.0, 2.0, 4.0):
+        sc.zoom = zoom
+        smooth = sum(p.detail() == "smooth" for p in paths)
+        assert smooth == min(len(paths), int(limits.MAX_SCREEN_SMOOTH_WORK // (d * zoom * zoom)))
+
+
+def test_smoothed_drawings_per_page_are_capped(qapp, monkeypatch):
+    from dtp_publisher import limits
+    from dtp_publisher.items import PathItem
+    from dtp_publisher.serialize import document_from_dict
+    monkeypatch.setattr(limits, "MAX_SMOOTH_DRAWINGS_PER_PAGE", 25)
+    doc, _ = document_from_dict(_path_page("M0 0L1 0L1 1L0 1Z", 40))
+    paths = [i for i in doc.pages[0].all_design_items() if isinstance(i, PathItem)]
+    assert sum(p.detail() == "smooth" for p in paths) == 25
+
+
+def test_simple_drawings_stay_smooth(qapp):
+    """Circles and boxes are cheap at any zoom (up to a page's worth)."""
+    from dtp_publisher.items import PathItem
+    from dtp_publisher.serialize import document_from_dict
+    circle = "M1 .5A.5 .5 0 1 1 0 .5A.5 .5 0 1 1 1 .5Z"
+    doc, warnings = document_from_dict(_path_page(circle, 40))
+    sc = doc.pages[0]
+    sc.zoom = 4.0
+    assert all(p.detail() == "smooth" for p in sc.all_design_items() if isinstance(p, PathItem))
+    assert warnings == []
+
+
+def test_printing_smooths_up_to_the_print_limit(qapp, monkeypatch):
+    from dtp_publisher.items import PathItem
+    it = PathItem(100, 100, _random_path(1190))
+    monkeypatch.setattr(it, "is_rendering", lambda: True)
+    assert it.detail() == "smooth"
+
+
+def test_page_drawing_detail_budget_refuses_file(qapp, monkeypatch):
+    from dtp_publisher import limits
+    from dtp_publisher.serialize import DocumentError, document_from_dict
+    monkeypatch.setattr(limits, "MAX_PAGE_PATH_CHARS", 10_000)
+    with pytest.raises(DocumentError, match="drawings"):
+        document_from_dict(_path_page(_random_path(1000), 2))
+
+
+def test_table_cells_count_as_text(qapp, monkeypatch):
+    from dtp_publisher import limits
+    from dtp_publisher.serialize import DocumentError, document_from_dict
+    monkeypatch.setattr(limits, "MAX_TEXT_CHARS", 1000)
+    item = {"kind": "table", "x": 0, "y": 0, "w": 50, "h": 50,
+            "table": {"rows": 2, "cols": 2, "cells": {"0,0": "x" * 600, "1,1": "y" * 600}}}
+    with pytest.raises(DocumentError, match="text"):
+        document_from_dict(_doc_data(items_per_page=1, item=item))
+
+
+# ── B6. objects on one page ─────────────────────────────────────────────────
+def test_objects_per_page_limit(qapp, monkeypatch):
+    from dtp_publisher import limits
+    from dtp_publisher.serialize import DocumentError, document_from_dict
+    monkeypatch.setattr(limits, "MAX_OBJECTS_PER_PAGE", 10)
+    document_from_dict(_doc_data(pages=3, items_per_page=10))       # 30 in all: fine
+    with pytest.raises(DocumentError, match="page"):
+        document_from_dict(_doc_data(pages=1, items_per_page=11))
+
+
+# ── benchmark finding: linked stories laid out once when opening ───────────
+def test_opening_lays_out_each_story_once(qapp, monkeypatch):
+    from dtp_publisher.items.text import TextItem
+    from dtp_publisher.serialize import document_from_dict
+    n = 30
+    items = []
+    for i in range(n):
+        d = {"kind": "text", "x": 10, "y": 10 + i * 25, "w": 100, "h": 20, "uid": f"t{i}",
+             "html": "<p>" + "word " * 2000 + "</p>" if i == 0 else ""}
+        if i:
+            d["linked"] = True
+        if i < n - 1:
+            d["link_next"] = f"t{i + 1}"
+        items.append(d)
+    data = _doc_data()
+    data["pages"][0]["items"] = items
+    calls = []
+    real = TextItem._line_spans                 # the expensive part of a layout
+
+    def counting(doc):
+        calls.append(1)
+        return real(doc)
+    monkeypatch.setattr(TextItem, "_line_spans", staticmethod(counting))
+    doc, _ = document_from_dict(data)
+    frames = sorted(doc.text_items(), key=lambda t: t.geometry().y)
+    assert frames[0].chain() == frames
+    assert len(calls) <= 3                   # it was once per link: 29 full layouts
+    assert frames[-1]._slice_pos[1] > frames[-1]._slice_pos[0]      # text reached the end
+
+
+def test_import_lays_out_each_story_once(qapp, tmp_path, monkeypatch):
+    """libmspub gives all 30 boxes of a story the whole story; re-linking them and
+    restoring their heights must not lay the story out once per box."""
+    from dtp_publisher.importers.odg import import_odg
+    from dtp_publisher.items.text import TextItem
+    story = "Grandad wrote this story about the long walk up the hill. " * 60
+    frames = "".join(_frame(10 + (i % 3) * 60, 10 + (i // 3) * 8, 55, 30, story)
+                     for i in range(30))
+    path = _odg(tmp_path / "s.odg", frames)
+    calls = []
+    real = TextItem._line_spans
+    monkeypatch.setattr(TextItem, "_line_spans",
+                        staticmethod(lambda doc: calls.append(1) or real(doc)))
+    doc, rep = import_odg(path)
+    assert rep.stories == 1
+    assert len(calls) <= 3
+
+
+def test_dictionary_keys_count_towards_the_json_budget(qapp, tmp_path, monkeypatch):
+    """C2: every dictionary entry makes a key *and* a value; counting separators
+    alone let a dictionary-heavy file through at about two-thirds of its cost."""
+    from dtp_publisher import limits, serialize
+    monkeypatch.setattr(limits, "MAX_JSON_NODES", 3000)
+    data = _doc_data()
+    data["view"] = {"junk": {f"k{i}": [] for i in range(1200)}}     # ~2,400 by separators
+    path = _write(tmp_path, data)
+    with pytest.raises(serialize.DocumentError, match="values"):
+        serialize.load_document(path)
+    data["view"] = {"junk": {f"k{i}": [] for i in range(600)}}      # well inside
+    serialize.load_document(_write(tmp_path, data, "ok.dtpub"))

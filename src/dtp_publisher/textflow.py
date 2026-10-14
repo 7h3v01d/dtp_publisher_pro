@@ -34,7 +34,10 @@ def _adopt(frames: List[TextItem], owner: TextItem):
 
 
 def connect(a: TextItem, b: TextItem, merge_text: bool = True):
-    """Make the story in ``a``'s chain continue into ``b`` (and b's followers)."""
+    """Make the story in ``a``'s chain continue into ``b`` (and b's followers).
+
+    To join many boxes at once (loading, importing), do it inside
+    ``deferred_layout`` so each story is laid out once, not once per link."""
     owner = a.chain_root()
     if merge_text and not b.chain_root().is_empty():
         frag = QTextDocumentFragment(b.chain_root()._own_doc)
@@ -113,11 +116,41 @@ def resolve_links(items: List[TextItem]) -> int:
     """After loading: connect boxes whose saved ``link_next`` points at another box."""
     by_uid: Dict[str, TextItem] = {t.uid: t for t in items}
     n = 0
-    for a in items:
-        uid = a._pending_next
-        a._pending_next = ""
-        b = by_uid.get(uid) if uid else None
-        if b is not None and not can_connect(a, b):
-            connect(a, b, merge_text=False)
-            n += 1
+    with deferred_layout(lambda: items):
+        for a in items:
+            uid = a._pending_next
+            a._pending_next = ""
+            b = by_uid.get(uid) if uid else None
+            if b is not None and not can_connect(a, b):
+                connect(a, b, merge_text=False)
+                n += 1
     return n
+
+
+class deferred_layout:
+    """``with deferred_layout(items):`` link and resize many boxes, then lay every
+    story out once on the way out (instead of once per change: quadratic)."""
+
+    def __init__(self, items_fn):
+        self.items_fn = items_fn
+
+    def __enter__(self):
+        TextItem._defer_layout += 1
+        return self
+
+    def __exit__(self, *exc):
+        TextItem._defer_layout -= 1
+        if not TextItem._defer_layout:
+            layout_stories(self.items_fn())
+        return False
+
+
+def layout_stories(items: List[TextItem]) -> None:
+    """Lay out every linked story among ``items`` once."""
+    done = set()
+    for t in items:
+        if t.is_linked():
+            root = t.chain_root()
+            if id(root) not in done:
+                done.add(id(root))
+                root.layout_chain()

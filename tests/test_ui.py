@@ -486,6 +486,35 @@ def test_unexpected_errors_are_logged_not_fatal(tmp_path, monkeypatch, qapp):
     from dtp_publisher.app import install_error_handler
     shown = []
     monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: shown.append(a)))
+    import io
+    console = io.StringIO()               # the handler's copy for the console goes here
+    monkeypatch.setattr(sys, "__stderr__", console)
+    old = sys.excepthook
+    log = tmp_path / "crash.log"
+    try:
+        install_error_handler(str(log))
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            sys.excepthook(*sys.exc_info())
+    finally:
+        sys.excepthook = old
+    assert "ValueError: boom" in log.read_text() and shown
+
+
+
+def test_error_handler_survives_a_missing_console(tmp_path, monkeypatch, qapp):
+    """On Windows (pythonw, a packaged program, some test runners) stderr can
+    exist but have an invalid handle: writing to it raised inside the handler."""
+    import sys
+    from dtp_publisher.app import install_error_handler
+
+    class BadConsole:
+        def write(self, _):
+            raise OSError(6, "The handle is invalid")
+    shown = []
+    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: shown.append(a)))
+    monkeypatch.setattr(sys, "__stderr__", BadConsole())
     old = sys.excepthook
     log = tmp_path / "crash.log"
     try:

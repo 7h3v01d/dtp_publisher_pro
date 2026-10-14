@@ -32,7 +32,11 @@ def install_error_handler(log_path: str):
                         f"v{__version__} ===\n{text}")
         except OSError:
             pass
-        sys.__stderr__ and sys.__stderr__.write(text)
+        try:                    # a windowed program may have no usable console
+            if sys.__stderr__ is not None:
+                sys.__stderr__.write(text)
+        except (OSError, ValueError, AttributeError):
+            pass
         from PyQt6.QtWidgets import QApplication, QMessageBox
         if QApplication.instance() is None or showing["busy"]:
             return

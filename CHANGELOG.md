@@ -1,10 +1,131 @@
 # Changelog
 
+## 5.2.3 — 2026-10-14 (pasted-text hardening, fourth review)
+
+### Fixed
+- **Pasting a table that has another table inside a cell could crash the
+  program** (for example, a cell with a line of text, then a small table, then
+  more text, as web pages and emails often have). The tables are now taken
+  apart from the innermost outwards, so this can't happen.
+- **Pasting more than 64 tables or boxed sections left the rest unconverted**,
+  so they were drawn wrongly. There is now no such cutoff: up to 5,000 are
+  converted with their formatting; anything bigger, or more than 20,000
+  pictures in one paste, is pasted as plain text instead. Either way, a text
+  box never ends up holding a table, box or picture.
+- **A table cell with three or more paragraphs** was only partly joined into
+  its row; every paragraph of the cell now joins the row.
+- Converting a large paste is now one step (one Undo) and much quicker:
+  5,000 tables take about a quarter of a second instead of six.
+
+## 5.2.2 — 2026-10-14 (text layout consolidation, third review)
+
+### Fixed
+- **Pasting from Word, a browser or an email** could bring tables, boxed
+  sections and inline pictures into a text box, which the text layout doesn't
+  draw (a table came out as a stack of loose cells). They are now turned into
+  ordinary story text as they arrive: a table becomes one paragraph per row
+  with the cells separated by tabs, a boxed section becomes plain paragraphs,
+  and inline pictures are removed (pictures are separate objects on the page).
+  Text and formatting are kept. Files made earlier that contain them are
+  converted when opened.
+- **Text could be drawn over a picture near the bottom of the last box** in a
+  story: when the picture reached past the box's bottom, the line was placed
+  across it instead of below it. Found by a new test that lays out thousands
+  of random arrangements of pictures.
+- **Lines could start a fraction of a point above their box** in a linked story
+  (box positions weren't rounded like the lines).
+- **Right-to-left text** now takes the right-hand gap when a picture leaves two
+  equal gaps (the side a reader meets first).
+- **Horizontal rules** (`<hr>`, from pasted text) are drawn again.
+- The text's overall width now shrinks when its widest line does, and a size
+  change in either direction is reported.
+- The safety check on opening files now counts dictionary keys too; a file
+  made of large dictionaries got through at about two-thirds of its real cost.
+
+### What a text box holds (now stated)
+A text box holds a *story*: paragraphs (alignment, indents, spacing, lists,
+tabs, direction, rules) and character formatting (font, size, colour, bold,
+italic, underline, highlight). Tables, boxed sections and pictures are their
+own objects on the page, as in Publisher. See `items/richtext.py`.
+
+## 5.2.1 — 2026-10-14 (first Windows test run)
+
+### Fixed
+- **Template text overflowed on Windows.** Six templates (flyer, poster,
+  newsletter, card, invitation, business cards) had text boxes sized snugly for
+  the fonts used in development; Windows' real Calibri and Georgia have taller
+  lines, so the text overflowed (red "more text" markers). A template box that
+  would overflow now shrinks its text just enough instead. Tested by building
+  every template with a font whose lines are 1.5 em tall (Calibri's are 1.22).
+- **The crash handler could crash.** When a program has no usable console
+  (some Windows set-ups, a packaged program) writing the error to it raised a
+  new error inside the handler, so the "please save" message never appeared.
+
+## 5.2.0 — 2026-10-14
+
+### New
+- **Text wraps around pictures.** Text in a box flows around any picture (or
+  other object set to wrap) in front of it, the way Publisher's "Square"
+  wrapping works: each line takes the widest free stretch beside the picture,
+  or carries on below it; slivers too narrow to read are skipped. Choose
+  *No Wrapping*, *Wrap Square* or *Wrap Top and Bottom* on the Arrange tab, in
+  the right-click menu, or under **Text wrap** on the Format panel. New
+  pictures wrap text; shapes, WordArt and text boxes don't unless you ask.
+  Publications made before 5.2 open exactly as they were (nothing wraps until
+  you turn it on).
+- **Imported Publisher files wrap** pictures and text boxes that sit in front
+  of a story, as they did in Publisher (decorations that cover a whole text
+  box, and master-page items, don't).
+- **Linked boxes can have different widths**: the story now flows into each
+  box at that box's own width (it used to use the first box's width).
+- **Smaller, faster PDFs**: photos go into PDFs and prints at 300 dpi (the
+  print-shop standard) instead of at full size. The 150-photo album's PDF went
+  from 323 MB in 53 s to 11 MB in 25 s. *Save as Picture* still uses every
+  pixel.
+
+### How the wrapping is built
+Text layout is now done by DTP Publisher's own layout (`items/flowlayout.py`)
+instead of Qt's. With nothing in the way it reproduces Qt's layout exactly —
+line breaks, positions, spacing, list markers, cursor and hit testing are
+compared with Qt's on every template (and, with `DTP_PUB_SAMPLES`, on real
+Publisher files) — so existing publications don't move by even a pixel.
+
+## 5.1.2 — 2026-10-14 (hardening, second review)
+
+### Fixed
+- **Photo albums no longer run out of memory.** Pictures keep only their
+  compressed bytes and a preview sized to their frame, made when first shown;
+  full size is decoded only for printing and PDFs. A 150-photo, 100-page album
+  now opens in about 2 seconds using 750 MB; before, it could not be built on
+  an 8 GB computer.
+- **Long linked stories open quickly**: each story is laid out once while a
+  file opens or a Publisher file is imported (it was once per link: 22 s for a
+  story through 100 pages, now under 3 s).
+- **Saving streams the file** instead of building it in memory first.
+- **Hostile files** (from the second review):
+  - The structure of a file is checked before it is parsed, so a small file
+    can't make the program use gigabytes.
+  - Pictures inside a file are budgeted and never decoded above the insert
+    size; absurdly large ones are left as empty frames with a message.
+  - Publisher files are size-checked before being copied, LibreOffice's
+    temporary files are kept in (and counted against) one folder, and that
+    folder is always removed afterwards.
+  - Very detailed drawings are drawn without smoothing or, beyond that, shown
+    as a labelled box, so no page can take minutes to draw. Their data is
+    kept unchanged.
+  - At most 20,000 objects in a file and 2,000 on a page.
+- **Save no longer waits for an autosave in progress.**
+
+### Added
+- `tools/benchmark.py`: open/save/autosave/paint/PDF times and peak memory for
+  a large ordinary publication.
+
 ## 5.1.1 — 2026-10-14 (hardening)
 
 A defensive release after an adversarial review. No new features; every
 finding was reproduced against the 5.1.0 code first (see `REVIEW.md`), and
-each fix has a regression test and a revert proof.
+each behavioural fix has a regression test and a revert proof (the version
+pins and the Windows build are checked by hand).
 
 ### Fixed
 - **Oversized input no longer exhausts memory.** All limits live in one place
@@ -81,8 +202,7 @@ each fix has a regression test and a revert proof.
 - A `META_ESCAPE` record made Publisher photos count as vector art.
 
 ### Known limits
-- Text does not yet wrap around pictures; in imported newsletters a photo can
-  sit over a column of text. Move or resize the picture or the box.
+- (Fixed in 5.2: text did not wrap around pictures.)
 - `.pub` files can be opened but not saved back as `.pub` (no program other
   than Publisher can write them, and Publisher itself was retired in
   October 2026). Save as `.dtpub` or PDF.

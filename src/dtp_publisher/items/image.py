@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import base64
+import math
 import os
 from typing import Any, Dict, Optional, Tuple
 
-from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QPointF, QRectF, Qt
+from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QPointF, QRectF, QSize, Qt
 from PyQt6.QtGui import (QColor, QFont, QImage, QImageIOHandler, QImageReader, QPainter,
                          QPainterPath, QPen, QPixmap)
 
@@ -17,7 +18,49 @@ from .base import BaseItem, num
 
 FIT_MODES = {"fill": "Fill frame (crop)", "fit": "Fit inside frame", "stretch": "Stretch"}
 MAX_EMBED_PX = 3000      # long side; larger photos are downsampled when inserted
-PREVIEW_PX = 1600        # on-screen preview resolution
+PREVIEW_PX = 1600        # most on-screen preview resolution
+MIN_PREVIEW_PX = 256
+PREVIEW_ZOOM = 4.0       # previews stay sharp up to about 300 % zoom
+OUTPUT_DPI = 300         # photos in PDFs and prints: the usual print-shop resolution
+_FULL_CACHE: list = []   # [(key, QImage)] — the last few full-size decodes, for printing
+_FULL_CACHE_SIZE = 2
+
+
+def read_image_bytes(data: bytes, scaled_long: Optional[int] = None) -> QImage:
+    """Decode stored picture bytes, optionally straight to a smaller size.
+
+    Never decodes more than ``MAX_EMBED_PX`` on the long side: a file can hold a
+    huge picture, but nothing is ever held at more than the insert size.
+    """
+    if not data:
+        return QImage()
+    ba = QByteArray(data)
+    buf = QBuffer(ba)
+    buf.open(QIODevice.OpenModeFlag.ReadOnly)
+    try:
+        reader = QImageReader(buf)
+        reader.setAutoTransform(False)          # stored pictures are already upright
+        size = reader.size()
+        if size.isValid():
+            cap = min(scaled_long or MAX_EMBED_PX, MAX_EMBED_PX)
+            if max(size.width(), size.height()) > cap:
+                reader.setScaledSize(size.scaled(cap, cap, Qt.AspectRatioMode.KeepAspectRatio))
+        return reader.read()
+    finally:
+        buf.close()
+
+
+def image_bytes_size(data: bytes) -> QSize:
+    """Picture size from the header alone (nothing is decoded)."""
+    if not data:
+        return QSize()
+    ba = QByteArray(data)
+    buf = QBuffer(ba)
+    buf.open(QIODevice.OpenModeFlag.ReadOnly)
+    try:
+        return QImageReader(buf).size()
+    finally:
+        buf.close()
 
 
 def encode_image(img: QImage, prefer: str = "auto", quality: int = 90) -> Tuple[bytes, str]:
@@ -146,10 +189,13 @@ class ImageItem(BaseItem):
         self.data: bytes = b""
         self.fmt = ""
         self.source_name = ""
-        self._image = QImage()
-        self._preview = QPixmap()
+        self._size = QSize()           # picture size (as it will be drawn)
+        self._preview = QPixmap()      # screen copy, sized to the frame
+        self._b64: Optional[str] = None
+        self._too_big = None
         self.stroke = QColor(60, 60, 60)
         self.stroke_width = 0.0
+        self.wrap = "square"           # as in Publisher: text flows round pictures
 
     def display_name(self) -> str:
         if self.name:
@@ -159,30 +205,94 @@ class ImageItem(BaseItem):
 
     # ── image data ──────────────────────────────────────────────────────────
     def has_image(self) -> bool:
-        return not self._image.isNull()
+        return self._size.isValid() and not self._size.isEmpty()
 
     def image(self) -> QImage:
-        return self._image
+        """The picture at full size (decoded when asked; not kept)."""
+        return self.full_image()
+
+    def full_image(self) -> QImage:
+        if not self.has_image():
+            return QImage()
+        key = (id(self.data), len(self.data))
+        for k, img in _FULL_CACHE:
+            if k == key:
+                return img
+        img = read_image_bytes(self.data)
+        _FULL_CACHE.insert(0, (key, img))
+        del _FULL_CACHE[_FULL_CACHE_SIZE:]
+        return img
 
     def set_image_data(self, data: bytes, fmt: str, name: str = "",
                        image: Optional[QImage] = None):
+        """Only the compressed bytes and a frame-sized preview are kept: a
+        150-photo album would otherwise hold gigabytes of decoded pixels."""
         self.data = bytes(data or b"")
-        self._b64: Optional[str] = None          # cached text form for saving
+        self._b64 = None                         # cached text form for saving
         self.fmt = fmt or ""
         self.source_name = name or ""
-        img = image if image is not None else QImage()
-        if image is None and self.data:
-            img.loadFromData(self.data)
-        self._image = img
-        if img.isNull():
-            self._preview = QPixmap()
-        else:
-            pv = img
-            if max(img.width(), img.height()) > PREVIEW_PX:
-                pv = img.scaled(PREVIEW_PX, PREVIEW_PX, Qt.AspectRatioMode.KeepAspectRatio,
-                                Qt.TransformationMode.SmoothTransformation)
-            self._preview = QPixmap.fromImage(pv)
+        self._preview = QPixmap()
+        self._size = QSize()
+        self._too_big = None
+        if image is not None and not image.isNull():
+            self._size = image.size()
+            self._make_preview(image)
+        elif self.data:
+            from ..limits import MAX_EMBEDDED_PIXELS
+            size = image_bytes_size(self.data)
+            if size.isValid() and size.width() * size.height() > MAX_EMBEDDED_PIXELS:
+                self._too_big = (size.width(), size.height())   # not made by this program
+                size = QSize()
+            if size.isValid() and not size.isEmpty():
+                if max(size.width(), size.height()) > MAX_EMBED_PX:
+                    size = size.scaled(MAX_EMBED_PX, MAX_EMBED_PX,
+                                       Qt.AspectRatioMode.KeepAspectRatio)
+                self._size = size
+                # the screen preview is made when the picture is first drawn, so
+                # opening a 100-page album only decodes the pages you look at
         self.update()
+
+    def _preview_needed(self) -> int:
+        """Long side (pixels) the screen preview needs for this frame."""
+        if not self.has_image():
+            return 0
+        iw, ih = self._size.width(), self._size.height()
+        r = self.rect()
+        sx, sy = r.width() / max(iw, 1), r.height() / max(ih, 1)
+        s = min(sx, sy) if self.fit_mode == "fit" else max(sx, sy)
+        want = max(iw, ih) * s * PREVIEW_ZOOM
+        return int(min(max(iw, ih), PREVIEW_PX, max(MIN_PREVIEW_PX, want)))
+
+    def _make_preview(self, image: Optional[QImage] = None) -> bool:
+        px = self._preview_needed()
+        if px <= 0:
+            return False
+        if image is not None:
+            pv = image
+            if max(pv.width(), pv.height()) > px:
+                pv = pv.scaled(px, px, Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+        else:
+            pv = read_image_bytes(self.data, px)
+            if pv.isNull():
+                return False
+            if max(pv.width(), pv.height()) > px:      # formats without scaled decoding
+                pv = pv.scaled(px, px, Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation)
+        self._preview = QPixmap.fromImage(pv)
+        return True
+
+    def _preview_ok(self) -> bool:
+        """Make the preview when first drawn, and a sharper one if the frame has
+        grown a lot.  False if the picture can't be decoded after all."""
+        if not self.has_image():
+            return False
+        have = max(self._preview.width(), self._preview.height())
+        need = self._preview_needed()
+        if have == 0 or need > have * 1.25:
+            if not self._make_preview() and have == 0:
+                return False
+        return True
 
     def get_prop(self, key: str):
         if key == "image":
@@ -199,7 +309,7 @@ class ImageItem(BaseItem):
     def natural_aspect(self) -> float:
         if not self.has_image():
             return self._w / max(self._h, 1e-6)
-        return self._image.width() / max(self._image.height(), 1)
+        return self._size.width() / max(self._size.height(), 1)
 
     # ── painting ─────────────────────────────────────────────────────────────
     def _clip_path(self) -> QPainterPath:
@@ -237,12 +347,13 @@ class ImageItem(BaseItem):
             p.save()
             p.setClipPath(clip)
             if self.is_rendering():
-                src, dst = self._source_target(self._image.width(), self._image.height())
-                p.drawImage(dst, self._image, src)
-            else:
+                self._draw_for_output(p)
+            elif self._preview_ok():
                 pw, ph = self._preview.width(), self._preview.height()
                 src, dst = self._source_target(pw, ph)
                 p.drawPixmap(dst, self._preview, src)
+            else:
+                p.fillRect(self.rect(), QColor(220, 220, 220))   # damaged inside
             p.restore()
         elif not self.is_rendering() or (self.page_scene() and self.page_scene().preview):
             self._paint_placeholder(p)
@@ -251,6 +362,35 @@ class ImageItem(BaseItem):
             p.setPen(pen)
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawPath(clip)
+
+    def _draw_for_output(self, p: QPainter):
+        """Draw the photo for a PDF, print or picture export at no more than
+        OUTPUT_DPI: a 3000-pixel photo in a 5 cm frame doesn't need 3000 pixels
+        (the 150-photo album's PDF was 323 MB)."""
+        img = self.full_image()
+        src, dst = self._source_target(img.width(), img.height())
+        dev = p.device()
+        if dev is None or isinstance(dev, (QImage, QPixmap)):
+            p.drawImage(dst, img, src)                   # Save as Picture: every pixel
+            return
+        dpi = dev.logicalDpiX()
+        m = p.worldTransform()
+        scale = math.hypot(m.m11(), m.m12())             # item units -> device pixels
+        need = dst.width() * scale * min(1.0, OUTPUT_DPI / max(dpi, 1))
+        if need >= 1 and src.width() > need * 1.1:
+            k = need / src.width()
+            box = src.toAlignedRect().intersected(img.rect())
+            piece = img.copy(box).scaled(max(1, round(box.width() * k)),
+                                         max(1, round(box.height() * k)),
+                                         Qt.AspectRatioMode.IgnoreAspectRatio,
+                                         Qt.TransformationMode.SmoothTransformation)
+            kx = piece.width() / max(box.width(), 1)
+            ky = piece.height() / max(box.height(), 1)
+            sub = QRectF((src.left() - box.left()) * kx, (src.top() - box.top()) * ky,
+                         src.width() * kx, src.height() * ky)
+            p.drawImage(dst, piece, sub)
+        else:
+            p.drawImage(dst, img, src)
 
     def _paint_placeholder(self, p: QPainter):
         r = self.rect()
@@ -321,9 +461,11 @@ class ImageItem(BaseItem):
         data = b""
         repaired = False
         self._load_notes = []
+        strict = False
         if isinstance(raw, str) and raw:
             try:
                 data = base64.b64decode(raw, validate=True)
+                strict = True
             except (ValueError, TypeError):
                 # damaged text: try once more ignoring stray characters, and keep the
                 # result only if it really is a picture (checked below)
@@ -335,9 +477,18 @@ class ImageItem(BaseItem):
         fmt = str(d.get("format", ""))[:8]
         self.set_image_data(data, fmt, str(d.get("source_name", ""))[:260])
         name = self.source_name or "a picture"
-        if raw and self._image.isNull():
+        if raw and not self.has_image():
+            big = self._too_big
             self.set_image_data(b"", "", self.source_name)
-            self._load_notes.append(f"{name} was damaged and has been left as an empty frame.")
+            if big:
+                self._load_notes.append(f"{name} is {big[0]:,} × {big[1]:,} pixels, far larger "
+                                        "than this program stores pictures, and has been left "
+                                        "as an empty frame.")
+            else:
+                self._load_notes.append(f"{name} was damaged and has been left as an empty "
+                                        "frame.")
         elif repaired:
             self._load_notes.append(f"{name} was slightly damaged in the file and was "
                                     "repaired; please check it.")
+        elif strict and self.has_image():
+            self._b64 = raw            # the text form is already in hand: no re-encoding

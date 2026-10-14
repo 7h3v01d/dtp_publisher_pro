@@ -455,3 +455,60 @@ def test_real_publisher_samples(qapp):
         again = document_from_dict(document_to_dict(doc))
         again = again[0] if isinstance(again, tuple) else again
         assert len(again.pages) == len(doc.pages), f
+
+
+
+@pytest.mark.skipif(not (SAMPLES and os.path.isdir(SAMPLES)),
+                    reason="set DTP_PUB_SAMPLES to a folder of .pub files")
+def test_real_publisher_text_lays_out_exactly_as_qt(qapp):
+    """The text of real publications, laid out and drawn (with selections) by
+    FlowLayout and by Qt's own layout, must match pixel for pixel."""
+    import random
+    from test_flowlayout import _doc, _dump, _render
+    from dtp_publisher.importers.libreoffice import find_soffice
+    from dtp_publisher.importers.pub import import_pub_blocking
+    if not find_soffice():
+        pytest.skip("LibreOffice is not installed")
+    r = random.Random(1)
+    for f in sorted(f for f in os.listdir(SAMPLES) if f.lower().endswith(".pub")):
+        doc, _ = import_pub_blocking(os.path.join(SAMPLES, f))
+        for it in doc.text_items():
+            if it.is_linked() and not it.writes_story():
+                continue
+            html, w = it.document.toHtml(), it.inner_rect().width()
+            a, b = _doc(html, w, False), _doc(html, w, True)
+            assert _dump(a) == _dump(b), f
+            n = a.characterCount()
+            if "<li" not in html:
+                sel = sorted((r.randrange(n), r.randrange(n)))
+                assert _render(a, -1, sel) == _render(b, -1, sel), (f, sel)
+
+
+@pytest.mark.skipif(not (SAMPLES and os.path.isdir(SAMPLES)),
+                    reason="set DTP_PUB_SAMPLES to a folder of .pub files")
+def test_real_publisher_round_trip(qapp, tmp_path):
+    """.pub -> import -> save .dtpub -> reopen -> PDF, with the text and pictures
+    surviving every step."""
+    from dtp_publisher.export import export_pdf
+    from dtp_publisher.importers.libreoffice import find_soffice
+    from dtp_publisher.importers.pub import import_pub_blocking
+    from dtp_publisher.serialize import load_document, save_document
+    if not find_soffice():
+        pytest.skip("LibreOffice is not installed")
+    for f in sorted(f for f in os.listdir(SAMPLES) if f.lower().endswith(".pub")):
+        doc, _ = import_pub_blocking(os.path.join(SAMPLES, f))
+        text = sorted(t.plain_text() for t in doc.text_items() if t.writes_story())
+        pics = sum(1 for sc in doc.pages for i in sc.all_design_items() if i.KIND == "image"
+                   and i.has_image())
+        p = str(tmp_path / (f + ".dtpub"))
+        save_document(doc, p)
+        again, warnings = load_document(p)
+        assert not warnings, (f, warnings)
+        assert sorted(t.plain_text() for t in again.text_items() if t.writes_story()) == text
+        assert sum(1 for sc in again.pages for i in sc.all_design_items()
+                   if i.KIND == "image" and i.has_image()) == pics
+        for t in again.text_items():
+            assert t.document.rootFrame().childFrames() == []
+        pdf = tmp_path / (f + ".pdf")
+        assert export_pdf(again, str(pdf)) == len(again.pages) or again.sheet
+        assert pdf.stat().st_size > 1000

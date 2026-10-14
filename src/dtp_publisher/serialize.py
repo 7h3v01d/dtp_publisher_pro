@@ -110,7 +110,17 @@ def page_from_dict(doc: Document, d: Dict[str, Any], warnings: List[str]) -> Pag
         it = item_from_dict(idict, warnings)
         if it is not None:
             sc.addItem(it)
+    _limit_fills(sc, warnings)
     return sc
+
+
+def _limit_fills(sc: PageScene, warnings: List[str]) -> None:
+    from .items.path import limit_page_drawings
+    n = limit_page_drawings(sc.all_design_items())
+    if n:
+        warnings.append(f"{n} very detailed drawing(s) on page {len(sc.doc.pages) + 1} are shown "
+                        "as boxes, because drawing them would make the program very "
+                        "slow. They are kept unchanged in the file.")
 
 
 def document_to_dict(doc: Document) -> Dict[str, Any]:
@@ -217,18 +227,32 @@ def _dedupe_uids(doc: Document, warnings: List[str]) -> None:
         warnings.append(f"{changed} object(s) had a duplicate id and were given a new one.")
 
 
+def dump_json(data: Any, f) -> None:
+    """Write JSON in pieces: a 240 MB album never exists as one big string too."""
+    enc = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
+    buf: List[str] = []
+    size = 0
+    for chunk in enc.iterencode(data):
+        buf.append(chunk)
+        size += len(chunk)
+        if size >= 1 << 20:
+            f.write("".join(buf).encode("utf-8"))
+            buf, size = [], 0
+    f.write("".join(buf).encode("utf-8"))
+
+
 def save_document(doc: Document, path: str, keep_backup: bool = True) -> bool:
     """Save; returns False when the save worked but the .bak copy could not be made."""
     data = document_to_dict(doc)
-    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    backup_ok = write_atomic(path, text.encode("utf-8"), keep_backup)
+    backup_ok = write_atomic(path, lambda f: dump_json(data, f), keep_backup)
     doc.path = path
     doc.mark_saved()
     return backup_ok
 
 
-def write_atomic(path: str, payload: bytes, keep_backup: bool = True) -> bool:
-    """Write ``payload`` to ``path`` atomically.  Raises OSError if the file could not
+def write_atomic(path: str, payload, keep_backup: bool = True) -> bool:
+    """Write ``payload`` (bytes, or a function given the open file) to ``path``
+    atomically.  Raises OSError if the file could not
     be written.  Returns False when it was written but the previous version could not
     be kept as ``.bak`` (the save itself must not fail over that)."""
     backup_ok = True
@@ -236,7 +260,10 @@ def write_atomic(path: str, payload: bytes, keep_backup: bool = True) -> bool:
     tmp = os.path.join(folder, f".{os.path.basename(path)}.{os.getpid()}.tmp")
     try:
         with open(tmp, "wb") as f:
-            f.write(payload)
+            if callable(payload):
+                payload(f)                       # streams its own output
+            else:
+                f.write(payload)
             f.flush()
             os.fsync(f.fileno())
         if keep_backup and os.path.exists(path):
@@ -261,11 +288,34 @@ def read_json_file(path: str) -> Dict[str, Any]:
         raise DocumentError(f"Cannot open the file:\n{ex}") from ex
     if size > MAX_FILE_BYTES:
         raise DocumentError("The file is too large to open.")
+    return parse_json_bytes(_read_capped(path))      # no local copy kept alive here
+
+
+def _read_capped(path: str) -> bytes:
     try:
         with open(path, "rb") as f:
-            raw = f.read()
-        return json.loads(raw.decode("utf-8-sig"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as ex:
+            return f.read(MAX_FILE_BYTES + 1)
+    except OSError as ex:
+        raise DocumentError(f"Cannot open the file:\n{ex}") from ex
+
+
+def parse_json_bytes(raw: bytes) -> Dict[str, Any]:
+    """Size and structure are checked before parsing; the bytes are let go before
+    the parse so a big album needs about two copies of itself, not three."""
+    if len(raw) > MAX_FILE_BYTES:              # grew since it was checked
+        raise DocumentError("The file is too large to open.")
+    try:
+        limits.check_json_structure(raw)
+    except limits.TooBig as ex:
+        raise DocumentError(str(ex)) from ex
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as ex:
+        raise DocumentError(f"The file is damaged or not a publication:\n{ex}") from ex
+    del raw
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, RecursionError) as ex:
         raise DocumentError(f"The file is damaged or not a publication:\n{ex}") from ex
 
 
@@ -401,11 +451,9 @@ def items_to_clip(items: List[BaseItem]) -> bytes:
 
 
 def items_from_clip(raw: bytes) -> List[BaseItem]:
-    if len(raw) > MAX_FILE_BYTES:
-        return []
     try:
-        data = json.loads(bytes(raw).decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
+        data = parse_json_bytes(bytes(raw))
+    except DocumentError:
         return []
     try:
         limits.LoadBudget().check_items(data.get("items") if isinstance(data, dict) else None)

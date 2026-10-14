@@ -210,6 +210,16 @@ class MainWindow(QMainWindow):
         A("forward", "Bring Forward", lambda: self.arrange("forward"), "forward", "Ctrl+]")
         A("backward", "Send Backward", lambda: self.arrange("backward"), "backward", "Ctrl+[")
         A("lock", "Lock", self.toggle_lock, "lock", None, "Lock objects so they can't be moved")
+        from PyQt6.QtGui import QActionGroup
+        self._wrap_group = QActionGroup(self)
+        for k, label, tip in (("none", "No Wrapping", "Text behind this object is not moved"),
+                              ("square", "Wrap Square",
+                               "Text in boxes behind this object flows around it"),
+                              ("top_bottom", "Wrap Top and Bottom",
+                               "Text stops above this object and carries on below it")):
+            act = A(f"wrap_{k}", label, lambda on, k=k: self.set_wrap(k) if on else None,
+                    f"wrap_{k}", None, tip, checkable=True)
+            self._wrap_group.addAction(act)
         A("fill_page", "Fill Page with Copies", self.fill_page, "fill_page", None,
           "Repeat the selected object across the page (labels, cards, tickets)")
         # view
@@ -490,6 +500,8 @@ class MainWindow(QMainWindow):
         g = p.group("Rotate and flip")
         g.add_smalls([a["rot_l"], a["rot_r"]])
         g.add_smalls([a["flip_h"], a["flip_v"]])
+        g = p.group("Text wrap")
+        g.add_smalls([a["wrap_none"], a["wrap_square"], a["wrap_top_bottom"]])
         g = p.group("Tools")
         g.add_large(a["lock"])
         g.add_large(a["fill_page"])
@@ -796,6 +808,18 @@ class MainWindow(QMainWindow):
         a["page_down"].setEnabled(idx < len(self.doc.pages) - 1)
         lock_txt = "Unlock" if items and all(i.locked for i in items) else "Lock"
         a["lock"].setText(lock_txt)
+        wraps = {getattr(i, "wrap", "none") for i in items}
+        for k in ("none", "square", "top_bottom"):
+            act = a[f"wrap_{k}"]
+            act.setEnabled(bool(unlocked) and not editing)
+            act.blockSignals(True)
+            act.setChecked(wraps == {k})
+            act.blockSignals(False)
+        if len(wraps) != 1:                       # mixed: nothing ticked
+            self._wrap_group.setExclusive(False)
+            for k in ("none", "square", "top_bottom"):
+                a[f"wrap_{k}"].setChecked(False)
+            self._wrap_group.setExclusive(True)
 
     def _view_changed(self):
         v = self.doc.view
@@ -923,6 +947,8 @@ class MainWindow(QMainWindow):
                 fresh_uids(it)
                 it.setPos(it.pos() + QPointF(off, off))
             self._insert(items, "Paste")
+            from ..items.path import limit_page_drawings
+            limit_page_drawings(self.scene.all_design_items())
             return
         if md.hasImage():
             img = QImage(md.imageData())
@@ -1391,6 +1417,20 @@ class MainWindow(QMainWindow):
         st.endMacro()
         self._select(members)
 
+    def set_wrap(self, mode: str):
+        """How text in boxes behind the selected objects flows round them."""
+        items = [i for i in self.selected() if not i.locked]
+        targets = []
+        for it in items:                       # a group's members carry the setting
+            targets.extend(it.members() if isinstance(it, GroupItem) else [it])
+        targets = [t for t in targets if t.wrap != mode]
+        if not targets:
+            return
+        labels = {"none": "No text wrap", "square": "Wrap text", "top_bottom": "Wrap text"}
+        self.push(PropCmd(self.scene, targets, "wrap", mode, text=labels[mode]))
+        self.scene.flush_wrap()
+        self._update_actions()
+
     def toggle_lock(self):
         items = self.selected()
         if not items:
@@ -1621,6 +1661,9 @@ class MainWindow(QMainWindow):
                 m.addAction(self.acts["group"])
             if any(isinstance(i, GroupItem) for i in items):
                 m.addAction(self.acts["ungroup"])
+            wr = m.addMenu(icon("wrap_square", 18), "Wrap Text")
+            for k in ("none", "square", "top_bottom"):
+                wr.addAction(self.acts[f"wrap_{k}"])
             m.addAction(self.acts["lock"])
             m.addSeparator()
             m.addAction("Format…", lambda: self.right.setCurrentWidget(self.props))

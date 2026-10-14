@@ -6,10 +6,12 @@ Qt items live on the GUI thread, so the document's state is captured there as
 plain Python data (pictures reuse their cached text form, so this is quick).
 Turning that into JSON and writing it happens on a worker QThread.
 
-Each autosave request carries a generation number.  Saving or closing the
-document invalidates every earlier generation under a lock, so a write that
-was queued or running when the user saved can never bring back an out-of-date
-recovery file.
+Each autosave request carries a generation number.  The writer encodes and
+writes to a temporary file without holding any lock, then renames it into
+place under a lock only if its generation is still current.  Saving or
+closing makes every earlier generation stale under that lock, so a write that
+was queued or running when the user saved can never bring back an
+out-of-date recovery file, and Save never waits for an autosave.
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ from typing import List, Optional
 from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal, pyqtSlot
 
 from . import settings as settings_mod
-from .serialize import document_to_dict, write_atomic
+from .serialize import document_to_dict, dump_json
 
 
 def pid_alive(pid: int) -> bool:
@@ -69,17 +71,51 @@ class _Writer(QObject):
 
     @pyqtSlot(str, object, str, int)
     def write(self, path: str, data: object, meta: str, gen: int):
+        """Encode and write outside the lock; only the final rename is done under it.
+
+        So Save never waits for an autosave in progress: it just makes the
+        generation stale, and a stale write deletes its own temporary files."""
         with self.gate.lock:
             if gen < self.gate.min_gen:            # saved or discarded since: stale
                 return
+        part, meta_part = f"{path}.{gen}.part", f"{path}.json.{gen}.part"
+        try:
+            _write_synced(part, lambda f: dump_json(data, f))
+            _write_synced(meta_part, meta.encode("utf-8"))
+        except (OSError, ValueError, TypeError):
+            _remove(part, meta_part)
+            self.done.emit(path, False)
+            return
+        with self.gate.lock:                       # commit only if still current
+            if gen < self.gate.min_gen:
+                _remove(part, meta_part)
+                return
             try:
-                payload = json.dumps(data, separators=(",", ":")).encode("utf-8")
-                write_atomic(path, payload, keep_backup=False)
-                write_atomic(path + ".json", meta.encode("utf-8"), keep_backup=False)
+                os.replace(part, path)
+                os.replace(meta_part, path + ".json")
                 ok = True
-            except (OSError, ValueError, TypeError):
+            except OSError:
+                _remove(part, meta_part)
                 ok = False
         self.done.emit(path, ok)
+
+
+def _write_synced(path: str, payload) -> None:
+    with open(path, "wb") as f:
+        if callable(payload):
+            payload(f)
+        else:
+            f.write(payload)
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _remove(*paths: str) -> None:
+    for p in paths:
+        try:
+            os.remove(p)
+        except OSError:
+            pass
 
 
 class _Gate:
@@ -137,7 +173,8 @@ class Autosaver(QObject):
     def discard(self):
         """Forget the recovery copy: called after a real save, on close, on New/Open.
 
-        Waits for a write in progress, and makes every request already queued stale.
+        Makes every earlier request stale, whether queued or being written; the
+        lock is only ever held for a rename, so this never waits for a write.
         """
         with self._gate.lock:
             self._gate.min_gen = self._gen + 1
@@ -158,7 +195,15 @@ class Autosaver(QObject):
 def find_orphans() -> List[dict]:
     """Autosaves left behind by sessions that are no longer running."""
     out = []
-    for p in sorted(glob.glob(os.path.join(settings_mod.autosave_dir(), "autosave-*.dtpub"))):
+    folder = settings_mod.autosave_dir()
+    for part in glob.glob(os.path.join(folder, "autosave-*.part")):   # a crash mid-write
+        try:
+            pid = int(os.path.basename(part).split("-")[1])
+        except (IndexError, ValueError):
+            continue
+        if not pid_alive(pid):
+            _remove(part)
+    for p in sorted(glob.glob(os.path.join(folder, "autosave-*.dtpub"))):
         meta = {}
         try:
             with open(p + ".json", encoding="utf-8") as f:

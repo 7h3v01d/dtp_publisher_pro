@@ -84,6 +84,20 @@ def dir_size(path: str, stop_at: Optional[int] = None) -> int:
     return total
 
 
+def _copy_capped(src: str, dst: str, cap: int) -> None:
+    """Copy at most ``cap`` bytes (the file may grow after its size was checked)."""
+    done = 0
+    with open(src, "rb") as fi, open(dst, "wb") as fo:
+        while True:
+            chunk = fi.read(1 << 20)
+            if not chunk:
+                return
+            done += len(chunk)
+            if done > cap:
+                raise ConversionError("The file is too large to open.")
+            fo.write(chunk)
+
+
 def profile_dir() -> str:
     d = os.path.join(settings_mod.config_dir(), "lo-profile")
     os.makedirs(d, exist_ok=True)
@@ -98,12 +112,34 @@ def convert(src: str, fmt: str = "odg", timeout: float = 900.0,
     exe = soffice or find_soffice()
     if not exe:
         raise ConversionError("LibreOffice was not found on this computer.")
+    try:
+        size = os.path.getsize(src)
+    except OSError as ex:
+        raise ConversionError(f"The file could not be opened:\n{ex}") from ex
+    if not os.path.isfile(src):
+        raise ConversionError("That is not a file.")
+    if size > limits.MAX_PUB_SOURCE_BYTES:
+        raise ConversionError(f"The file is {limits.describe_bytes(size)}; Publisher files up "
+                              f"to {limits.describe_bytes(limits.MAX_PUB_SOURCE_BYTES)} "
+                              "can be opened.")
     work = tempfile.mkdtemp(prefix="dtp-import-")
+    try:
+        return _convert_in(work, src, fmt, timeout, cancelled, exe)
+    except BaseException:
+        shutil.rmtree(work, ignore_errors=True)      # nothing is left behind on failure
+        raise
+
+
+def _convert_in(work: str, src: str, fmt: str, timeout: float,
+                cancelled: Callable[[], bool], exe: str) -> str:
     ext = os.path.splitext(src)[1].lower() or ".pub"
     local = os.path.join(work, "input" + ext)
-    shutil.copyfile(src, local)
+    _copy_capped(src, local, limits.MAX_PUB_SOURCE_BYTES)
     out_dir = os.path.join(work, "out")
     os.makedirs(out_dir)
+    tmp_dir = os.path.join(work, "tmp")              # LibreOffice's own temp files
+    os.makedirs(tmp_dir)
+    env = dict(os.environ, TMP=tmp_dir, TEMP=tmp_dir, TMPDIR=tmp_dir)
     cmd = [exe, f"-env:UserInstallation={Path(profile_dir()).as_uri()}", "--headless",
            "--invisible", "--norestore", "--nologo", "--nodefault", "--nolockcheck",
            "--convert-to", fmt, "--outdir", out_dir, local]
@@ -112,13 +148,13 @@ def convert(src: str, fmt: str = "odg", timeout: float = 900.0,
     last_err = ""
     for attempt in range(2):          # the very first run only creates the profile
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                creationflags=flags)
+                                creationflags=flags, env=env)
         t0 = time.monotonic()
         next_size_check = t0 + 2.0
         while proc.poll() is None:
             if time.monotonic() >= next_size_check:      # runaway output fills the disk
                 next_size_check = time.monotonic() + 2.0
-                if dir_size(out_dir, limits.MAX_CONVERT_DIR_BYTES) > limits.MAX_CONVERT_DIR_BYTES:
+                if dir_size(work, limits.MAX_CONVERT_DIR_BYTES) > limits.MAX_CONVERT_DIR_BYTES:
                     proc.kill()
                     proc.wait()
                     shutil.rmtree(work, ignore_errors=True)
