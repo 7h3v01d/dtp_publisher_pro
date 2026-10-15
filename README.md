@@ -8,14 +8,20 @@ Python 3.11+ · PyQt6 · Windows (also runs on Linux/macOS) · Apache 2.0
 
 ---
 
-<img width="1920" height="1040" alt="screenshot" src="screenshot.png" />
-
 ## Starting it
 
 **Easiest (for someone else's PC):** on your own PC run **`build_exe.bat`**
 once. It makes a folder `dist\DTP Publisher\`; copy that whole folder to the
 other computer and double-click **DTP Publisher.exe**. Nothing else needs
 installing (except LibreOffice, only if they open Publisher `.pub` files).
+
+**As one single file:** run **`build_onefile.bat`** instead. It makes just
+`dist-single\DTP Publisher.exe` (about 65 MB) — simpler to copy or put on a USB
+stick. The catch: each time it starts it first unpacks itself into a temporary
+folder, so it opens a few seconds slower than the folder version (a welcome
+picture shows meanwhile), and virus checkers look at one-file programs more
+suspiciously. Both build scripts finish by running the new program's
+`--self-test` (photos, manual, PDF), and stop if anything is missing.
 
 **From the source:** double-click **`runme.bat`**. The first time, it sets itself up (this needs an
 internet connection and takes a minute or two); after that it opens straight

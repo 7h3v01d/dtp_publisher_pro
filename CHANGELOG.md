@@ -1,5 +1,41 @@
 # Changelog
 
+## 5.3.4 — 2026-10-16
+
+### Changed
+- The one-file program's copy of the manual (about 2 MB, in the settings
+  folder) now replaces the copy made by an earlier version instead of
+  adding another. First Windows run of the one-file build: self-test passed.
+
+## 5.3.3 — 2026-10-16 (single-file build)
+
+### Added
+- **`build_onefile.bat`** builds the program as one file,
+  `dist-single\DTP Publisher.exe`, as well as the existing folder build. The
+  same recipe (`packaging/dtp_publisher.spec`) makes both (`DTP_ONEFILE=1`).
+  While the one file unpacks itself, PyInstaller shows the welcome picture
+  (when the building Python has Tcl/Tk, as the python.org one does); the
+  program closes it as its own picture appears.
+- **`DTP Publisher.exe --self-test=result.json`** checks a built program has
+  what it needs: reading photos (Qt's JPEG/PNG/GIF/BMP plug-ins), the manual
+  and its pictures, the welcome picture and PDF export. Both build scripts
+  run it and stop if anything fails.
+
+### Fixed (for the one-file build)
+- The manual was opened from the one-file program's temporary folder, which is
+  deleted when the program closes; it is now copied (once per version) to the
+  settings folder and opened from there.
+
+## 5.3.2 — 2026-10-16 (welcome picture)
+
+### Added
+- **A welcome picture while the program starts.** It appears as soon as
+  possible (before the slow part of starting), stays at least 3 seconds or
+  until the program is ready if that takes longer, and a click or any key
+  closes it at once. The version number is shown on it. *File ▸ Preferences ▸
+  Show the welcome picture while the program starts* turns it off. The main
+  window and start screen appear when it goes, never behind it.
+
 ## 5.3.1 — 2026-10-14 (user manual)
 
 ### Added
