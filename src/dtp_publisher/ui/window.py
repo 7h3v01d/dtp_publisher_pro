@@ -60,6 +60,38 @@ def manual_path() -> str:
                         "help", "manual.html")
 
 
+def manual_for_browser() -> str:
+    """The manual file to hand to the web browser.  The one-file .exe unpacks
+    itself into a temporary folder that disappears when the program closes, so
+    there the manual is copied (once per version) to the settings folder."""
+    import shutil
+    import tempfile
+    src = manual_path()
+    tmp = os.path.normcase(os.path.realpath(tempfile.gettempdir()))
+    here = os.path.normcase(os.path.realpath(src))
+    if not here.startswith(tmp + os.sep):
+        return src
+    dst_dir = os.path.join(settings_mod.config_dir(), f"manual-{__version__}")
+    dst = os.path.join(dst_dir, "manual.html")
+    if not os.path.isfile(dst):
+        shutil.copytree(os.path.dirname(src), dst_dir, dirs_exist_ok=True)
+        _remove_old_manuals(dst_dir)
+    return dst
+
+
+def _remove_old_manuals(keep: str):
+    """Copies made by earlier versions (about 2 MB each).  Only folders named
+    like ``manual-5.3.3`` that hold a manual.html are touched."""
+    import re
+    import shutil
+    base = os.path.dirname(keep)
+    for name in os.listdir(base):
+        path = os.path.join(base, name)
+        if (re.fullmatch(r"manual-\d+\.\d+\.\d+", name) and path != keep
+                and os.path.isfile(os.path.join(path, "manual.html"))):
+            shutil.rmtree(path, ignore_errors=True)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, s: Optional[settings_mod.Settings] = None, doc: Optional[Document] = None):
         super().__init__()
@@ -2073,6 +2105,11 @@ class MainWindow(QMainWindow):
     def open_manual(self):
         """The user manual, in the web browser (it works without the internet)."""
         path = manual_path()
+        if os.path.isfile(path):
+            try:
+                path = manual_for_browser()
+            except OSError:
+                pass                            # the original still opens for now
         if not os.path.isfile(path):
             QMessageBox.warning(self, "User Manual",
                                 f"The manual is missing from the program folder:\n{path}")

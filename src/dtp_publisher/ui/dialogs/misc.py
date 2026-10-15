@@ -55,6 +55,9 @@ class PreferencesDialog(QDialog):
         self.start = QCheckBox("Show the start screen when the program opens")
         self.start.setChecked(s.show_start)
         f.addRow(self.start)
+        self.splash = QCheckBox("Show the welcome picture while the program starts")
+        self.splash.setChecked(s.show_splash)
+        f.addRow(self.splash)
         v.addLayout(f)
         self.assoc = {}
         if winassoc.supported() or assoc_registry is not None:
@@ -106,6 +109,7 @@ class PreferencesDialog(QDialog):
         s.autosave_minutes = self.autosave.value()
         s.keep_backup = self.backup.isChecked()
         s.show_start = self.start.isChecked()
+        s.show_splash = self.splash.isChecked()
 
 
 class ExportPicturesDialog(QDialog):

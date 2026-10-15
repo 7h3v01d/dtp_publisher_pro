@@ -39,6 +39,7 @@ class Settings:
     autosave_minutes: int = 3
     keep_backup: bool = True
     show_start: bool = True
+    show_splash: bool = True
     default_font: str = "Calibri"
     default_size: float = 14.0
     recent: List[str] = field(default_factory=list)

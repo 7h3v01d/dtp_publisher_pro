@@ -52,8 +52,110 @@ def install_error_handler(log_path: str):
     sys.excepthook = hook
 
 
+def close_boot_splash():
+    """The one-file .exe shows a picture while it unpacks itself (PyInstaller's
+    pyi_splash); close it once the program's own window or picture is up."""
+    if "_PYI_SPLASH_IPC" not in os.environ:     # no such picture in this build
+        return
+    try:
+        import pyi_splash  # type: ignore[import-not-found]
+        pyi_splash.close()
+    except Exception:                   # never stop the program over a picture
+        pass
+
+
+def self_test(out_path: str) -> int:
+    """``DTP Publisher.exe --self-test=result.json``: check a built program has
+    everything it needs (used by build_onefile.bat; handy after any build).
+    Writes the results as JSON; returns 0 if all passed."""
+    import json
+    import tempfile
+    import traceback
+
+    from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
+    from PyQt6.QtGui import QImage, QImageReader
+    from PyQt6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication(sys.argv[:1])
+    checks = []
+
+    def check(name, fn):
+        try:
+            detail = fn()
+            checks.append({"name": name, "ok": True, "detail": detail})
+        except Exception:
+            checks.append({"name": name, "ok": False, "detail": traceback.format_exc(limit=3)})
+
+    def manual():
+        from .ui.window import manual_for_browser, manual_path
+        assert os.path.isfile(manual_path()), manual_path()
+        img = os.path.join(os.path.dirname(manual_path()), "img")
+        n = len(os.listdir(img))
+        assert n >= 10, n
+        shown = manual_for_browser()
+        assert os.path.isfile(shown), shown
+        return f"{n} pictures; opens {shown}"
+
+    def splash_picture():
+        from .splash import IMAGE
+        img = QImage(IMAGE)
+        assert not img.isNull(), IMAGE
+        return f"{img.width()}x{img.height()}"
+
+    def photos():
+        fmts = {bytes(f).decode() for f in QImageReader.supportedImageFormats()}
+        for need in ("jpeg", "png", "gif", "bmp"):
+            assert need in fmts, f"cannot read {need}: {sorted(fmts)}"
+        ba = QByteArray()
+        buf = QBuffer(ba)
+        buf.open(QIODevice.OpenModeFlag.WriteOnly)
+        src = QImage(64, 48, QImage.Format.Format_RGB32)
+        src.fill(0x3366AA)
+        assert src.save(buf, "JPEG"), "cannot write JPEG"
+        back = QImage.fromData(ba)
+        assert not back.isNull() and back.width() == 64, "JPEG round trip"
+        return ", ".join(sorted(fmts))
+
+    def pdf():
+        from .export import export_pdf
+        from .templates import build
+        out = os.path.join(tempfile.mkdtemp(prefix="dtp-selftest-"), "t.pdf")
+        export_pdf(build("flyer"), out)
+        size = os.path.getsize(out)
+        assert size > 1000, size
+        return f"{size} bytes"
+
+    def program():
+        from . import winassoc
+        exe = winassoc.launcher()[0]
+        assert os.path.isfile(exe), exe
+        return {"frozen": bool(getattr(sys, "frozen", False)), "launcher": exe,
+                "unpacked_to": getattr(sys, "_MEIPASS", "")}
+
+    check("version", lambda: __version__)
+    check("program", program)
+    check("manual", manual)
+    check("welcome picture", splash_picture)
+    check("photos (Qt image plugins)", photos)
+    check("PDF export", pdf)
+    ok = all(c["ok"] for c in checks)
+    try:
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump({"ok": ok, "version": __version__, "checks": checks}, f, indent=2)
+    except OSError:
+        pass
+    del app
+    return 0 if ok else 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     argv = list(sys.argv if argv is None else argv)
+    for a in argv[1:]:
+        if a == "--self-test" or a.startswith("--self-test="):
+            close_boot_splash()
+            out = a.partition("=")[2] or os.path.join(settings_mod.config_dir(),
+                                                      "self-test.json")
+            return self_test(out)
     s = settings_mod.get()
     # UI scaling must be decided before QApplication exists.
     if "QT_SCALE_FACTOR" not in os.environ and abs(s.ui_scale - 1.0) > 1e-6:
@@ -77,11 +179,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     app.setFont(f)
     theme.apply(app, s.theme)
 
+    splash = None
+    if s.show_splash:
+        from .splash import Splash
+        splash = Splash(lambda: begin())
+        splash.show()
+        app.processEvents()             # paint it now, before the slow imports
+    close_boot_splash()                 # the one-file .exe's unpacking picture
+
     from .serialize import DocumentError, load_document
     from .ui.window import MainWindow
 
     win = MainWindow(s)
-    win.show()
 
     def startup():
         files = [a for a in argv[1:] if not a.startswith("-") and os.path.isfile(a)]
@@ -125,7 +234,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                 s.show_start = dlg.cb_show.isChecked()
                 s.save()
 
-    QTimer.singleShot(50, startup)
+    def begin():
+        win.show()
+        win.raise_()
+        win.activateWindow()
+        QTimer.singleShot(50, startup)
+
+    if splash is not None:
+        splash.ready()                  # the window appears when the picture goes
+    else:
+        begin()
     QTimer.singleShot(2000, _repair_file_types)
     return app.exec()
 
