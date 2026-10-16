@@ -1,202 +1,264 @@
+Restricted Use Software Licence v1.1
 
-                                 Apache License
-                           Version 2.0, January 2004
-                        https://www.apache.org/licenses/
+Copyright © 2026 Leon Priest. All Rights Reserved.
 
-   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+1. Ownership
 
-   1. Definitions.
+This software, including its source code, executable code, documentation, associated files, user interfaces, designs, configuration files, tests, data structures, and other original materials (collectively, the “Software”), is owned by or licensed to the copyright holder and is protected by applicable copyright and intellectual property laws.
 
-      "License" shall mean the terms and conditions for use, reproduction,
-      and distribution as defined by Sections 1 through 9 of this document.
+This licence does not transfer ownership of the Software or any intellectual property rights in the Software to you.
 
-      "Licensor" shall mean the copyright owner or entity authorized by
-      the copyright owner that is granting the License.
+Except for the limited rights expressly granted by this licence, all rights are reserved.
 
-      "Legal Entity" shall mean the union of the acting entity and all
-      other entities that control, are controlled by, or are under common
-      control with that entity. For the purposes of this definition,
-      "control" means (i) the power, direct or indirect, to cause the
-      direction or management of such entity, whether by contract or
-      otherwise, or (ii) ownership of fifty percent (50%) or more of the
-      outstanding shares, or (iii) beneficial ownership of such entity.
+2. Permitted Use
 
-      "You" (or "Your") shall mean an individual or Legal Entity
-      exercising permissions granted by this License.
+Subject to the terms of this licence, you are granted a limited, personal, non-exclusive, non-transferable and non-sublicensable licence to:
 
-      "Source" form shall mean the preferred form for making modifications,
-      including but not limited to software source code, documentation
-      source, and configuration files.
+* download the Software;
+* install the Software;
+* execute and use the Software;
+* inspect publicly available source code;
+* evaluate and study the Software;
+* use the Software for personal, educational, research, hobbyist, testing, or other non-commercial purposes;
+* make reasonable backup copies for your own permitted use.
 
-      "Object" form shall mean any form resulting from mechanical
-      transformation or translation of a Source form, including but
-      not limited to compiled object code, generated documentation,
-      and conversions to other media types.
+No ownership interest is granted by this permission.
 
-      "Work" shall mean the work of authorship, whether in Source or
-      Object form, made available under the License, as indicated by a
-      copyright notice that is included in or attached to the work
-      (an example is provided in the Appendix below).
+3. Commercial Use
 
-      "Derivative Works" shall mean any work, whether in Source or Object
-      form, that is based on (or derived from) the Work and for which the
-      editorial revisions, annotations, elaborations, or other modifications
-      represent, as a whole, an original work of authorship. For the purposes
-      of this License, Derivative Works shall not include works that remain
-      separable from, or merely link (or bind by name) to the interfaces of,
-      the Work and Derivative Works thereof.
+Commercial use is prohibited unless you have obtained prior written permission or a separate commercial licence from the copyright holder.
 
-      "Contribution" shall mean any work of authorship, including
-      the original version of the Work and any modifications or additions
-      to that Work or Derivative Works thereof, that is intentionally
-      submitted to Licensor for inclusion in the Work by the copyright owner
-      or by an individual or Legal Entity authorized to submit on behalf of
-      the copyright owner. For the purposes of this definition, "submitted"
-      means any form of electronic, verbal, or written communication sent
-      to the Licensor or its representatives, including but not limited to
-      communication on electronic mailing lists, source code control systems,
-      and issue tracking systems that are managed by, or on behalf of, the
-      Licensor for the purpose of discussing and improving the Work, but
-      excluding communication that is conspicuously marked or otherwise
-      designated in writing by the copyright owner as "Not a Contribution."
+“Commercial Use” includes use primarily connected with commercial advantage, monetary compensation, revenue generation, paid services, business operations, or the provision of products or services to third parties.
 
-      "Contributor" shall mean Licensor and any individual or Legal Entity
-      on behalf of whom a Contribution has been received by Licensor and
-      subsequently incorporated within the Work.
+Without separate permission, you may not:
 
-   2. Grant of Copyright License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      copyright license to reproduce, prepare Derivative Works of,
-      publicly display, publicly perform, sublicense, and distribute the
-      Work and such Derivative Works in Source or Object form.
+* sell the Software;
+* charge for access to the Software;
+* rent, lease or sublicense the Software;
+* package the Software with a product or service offered for payment;
+* incorporate the Software or substantial portions of it into a commercial product or service;
+* operate the Software as part of a paid hosted service, SaaS platform, managed service or commercial API;
+* use the Software to provide paid services to clients or customers;
+* use the Software as an internal production tool for a business or other commercial enterprise;
+* use the Software primarily to reduce commercial operating costs, provide commercial services, or generate business value;
+* commercially exploit modified, translated, converted, adapted or derivative versions of the Software.
 
-   3. Grant of Patent License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      (except as stated in this section) patent license to make, have made,
-      use, offer to sell, sell, import, and otherwise transfer the Work,
-      where such license applies only to those patent claims licensable
-      by such Contributor that are necessarily infringed by their
-      Contribution(s) alone or by combination of their Contribution(s)
-      with the Work to which such Contribution(s) was submitted. If You
-      institute patent litigation against any entity (including a
-      cross-claim or counterclaim in a lawsuit) alleging that the Work
-      or a Contribution incorporated within the Work constitutes direct
-      or contributory patent infringement, then any patent licenses
-      granted to You under this License for that Work shall terminate
-      as of the date such litigation is filed.
+Use by a business, company, partnership, contractor, consultancy, government contractor, commercial research organisation or other commercial entity is presumed to be Commercial Use unless the copyright holder has expressly authorised that use.
 
-   4. Redistribution. You may reproduce and distribute copies of the
-      Work or Derivative Works thereof in any medium, with or without
-      modifications, and in Source or Object form, provided that You
-      meet the following conditions:
+Commercial licences may be made available separately.
 
-      (a) You must give any other recipients of the Work or
-          Derivative Works a copy of this License; and
+4. Modification and Derivative Works
 
-      (b) You must cause any modified files to carry prominent notices
-          stating that You changed the files; and
+Except where applicable law provides a right that cannot lawfully be excluded or restricted, you may not, without prior written permission:
 
-      (c) You must retain, in the Source form of any Derivative Works
-          that You distribute, all copyright, patent, trademark, and
-          attribution notices from the Source form of the Work,
-          excluding those notices that do not pertain to any part of
-          the Derivative Works; and
+* modify the Software;
+* adapt the Software;
+* translate the Software;
+* create derivative works from the Software;
+* port the Software to another platform for redistribution;
+* publish patched, enhanced or altered versions;
+* combine substantial portions of the Software with another work for redistribution;
+* distribute builds created from modified source code.
 
-      (d) If the Work includes a "NOTICE" text file as part of its
-          distribution, then any Derivative Works that You distribute must
-          include a readable copy of the attribution notices contained
-          within such NOTICE file, excluding those notices that do not
-          pertain to any part of the Derivative Works, in at least one
-          of the following places: within a NOTICE text file distributed
-          as part of the Derivative Works; within the Source form or
-          documentation, if provided along with the Derivative Works; or,
-          within a display generated by the Derivative Works, if and
-          wherever such third-party notices normally appear. The contents
-          of the NOTICE file are for informational purposes only and
-          do not modify the License. You may add Your own attribution
-          notices within Derivative Works that You distribute, alongside
-          or as an addendum to the NOTICE text from the Work, provided
-          that such additional attribution notices cannot be construed
-          as modifying the License.
+This restriction does not prohibit merely configuring the Software through configuration mechanisms intentionally provided for users.
 
-      You may add Your own copyright statement to Your modifications and
-      may provide additional or different license terms and conditions
-      for use, reproduction, or distribution of Your modifications, or
-      for any such Derivative Works as a whole, provided Your use,
-      reproduction, and distribution of the Work otherwise complies with
-      the conditions stated in this License.
+5. Private Experimentation
 
-   5. Submission of Contributions. Unless You explicitly state otherwise,
-      any Contribution intentionally submitted for inclusion in the Work
-      by You to the Licensor shall be under the terms and conditions of
-      this License, without any additional terms or conditions.
-      Notwithstanding the above, nothing herein shall supersede or modify
-      the terms of any separate license agreement you may have executed
-      with Licensor regarding such Contributions.
+You may inspect and study publicly available source code.
 
-   6. Trademarks. This License does not grant permission to use the trade
-      names, trademarks, service marks, or product names of the Licensor,
-      except as required for reasonable and customary use in describing the
-      origin of the Work and reproducing the content of the NOTICE file.
+Private experimentation, debugging, testing or temporary technical alteration is permitted only to the extent required by applicable law or expressly authorised by the copyright holder.
 
-   7. Disclaimer of Warranty. Unless required by applicable law or
-      agreed to in writing, Licensor provides the Work (and each
-      Contributor provides its Contributions) on an "AS IS" BASIS,
-      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-      implied, including, without limitation, any warranties or conditions
-      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
-      PARTICULAR PURPOSE. You are solely responsible for determining the
-      appropriateness of using or redistributing the Work and assume any
-      risks associated with Your exercise of permissions under this License.
+Permission to inspect source code does not grant permission to distribute modified source code or derivative works.
 
-   8. Limitation of Liability. In no event and under no legal theory,
-      whether in tort (including negligence), contract, or otherwise,
-      unless required by applicable law (such as deliberate and grossly
-      negligent acts) or agreed to in writing, shall any Contributor be
-      liable to You for damages, including any direct, indirect, special,
-      incidental, or consequential damages of any character arising as a
-      result of this License or out of the use or inability to use the
-      Work (including but not limited to damages for loss of goodwill,
-      work stoppage, computer failure or malfunction, or any and all
-      other commercial damages or losses), even if such Contributor
-      has been advised of the possibility of such damages.
+6. Redistribution
 
-   9. Accepting Warranty or Additional Liability. While redistributing
-      the Work or Derivative Works thereof, You may choose to offer,
-      and charge a fee for, acceptance of support, warranty, indemnity,
-      or other liability obligations and/or rights consistent with this
-      License. However, in accepting such obligations, You may act only
-      on Your own behalf and on Your sole responsibility, not on behalf
-      of any other Contributor, and only if You agree to indemnify,
-      defend, and hold each Contributor harmless for any liability
-      incurred by, or claims asserted against, such Contributor by reason
-      of your accepting any such warranty or additional liability.
+Except as expressly permitted below, you may not redistribute, republish, mirror, rehost or provide copies of the Software to third parties without prior written permission.
 
-   END OF TERMS AND CONDITIONS
+You may:
 
-   APPENDIX: How to apply the Apache License to your work.
+* link to an official repository, website or authorised download location;
+* make copies reasonably required for your own permitted use;
+* use repository-hosting functionality, such as a platform-provided fork, where the hosting platform’s terms expressly grant that functionality.
 
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "[]"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
+A platform-provided fork or copy does not grant additional rights to modify, redistribute, commercially exploit, sublicense or otherwise use the Software beyond the rights provided by this licence and the applicable hosting platform terms.
 
-   Copyright [yyyy] [name of copyright owner]
+The copyright holder may request that users obtain releases from an official distribution source to reduce outdated, altered or malicious copies.
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+7. Source Availability Does Not Mean Open Source
 
-       https://www.apache.org/licenses/LICENSE-2.0
+Making source code publicly viewable or downloadable does not place the Software in the public domain and does not make the Software “open source” under an open-source licence.
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Access to source code grants only the permissions expressly provided by this licence.
+
+No permission to modify, redistribute, sell, sublicense, commercially exploit or create derivative works is implied merely because source code is publicly accessible.
+
+8. Code Extraction and Reuse
+
+Except where permitted by applicable law, you may not copy or extract substantial portions of the Software for use in another program, library, application, service, repository or commercial project without prior written permission.
+
+Small excerpts may be used only where permitted by applicable copyright law or other applicable legal exceptions.
+
+This licence does not grant permission to systematically extract source code, algorithms, implementation details or other protected material for incorporation into another product or project.
+
+9. Artificial Intelligence and Machine Learning
+
+Without prior written permission, you may not intentionally use the Software or substantial portions of its source code as:
+
+* training material for a machine-learning or artificial-intelligence model;
+* fine-tuning data;
+* reinforcement-learning data;
+* benchmark-answer training data;
+* a source-code corpus for model development;
+* part of a commercial training dataset;
+* material for automated generation of substantially similar software.
+
+This clause does not restrict uses that cannot lawfully be restricted under applicable law.
+
+Ordinary indexing, searching, security scanning, code analysis or repository functionality supplied by a hosting service is not prohibited merely because automated systems are involved.
+
+10. Reverse Engineering
+
+Except where permitted by applicable law or where necessary to exercise a right that cannot lawfully be excluded, you may not reverse engineer, decompile, disassemble or otherwise attempt to derive non-public source code or protected implementation details from distributed binary versions of the Software.
+
+Nothing in this clause restricts inspection of source code intentionally made publicly available.
+
+11. Attribution and Proprietary Notices
+
+You may not:
+
+* remove or obscure copyright notices;
+* remove or obscure licence notices;
+* remove authorship or attribution notices;
+* falsely represent yourself or another person as the original author;
+* represent an unauthorised modified version as an official release;
+* imply endorsement, sponsorship, partnership or affiliation with the copyright holder without permission.
+
+Where a permitted copy is made, existing copyright and licence notices must be retained.
+
+12. Trademarks and Project Identity
+
+This licence does not grant permission to use project names, logos, trademarks, service marks or other branding except as reasonably necessary to identify the Software truthfully.
+
+No permission is granted to use project branding in a way that suggests an unofficial version, product or service is authorised or endorsed by the copyright holder.
+
+13. Third-Party Components
+
+The Software may contain or depend upon third-party software, libraries, packages, assets or other materials.
+
+Those components remain governed by their respective licences and copyright terms.
+
+This licence applies only to material for which the copyright holder owns or controls the relevant rights.
+
+Nothing in this licence modifies, overrides or restricts rights independently granted under a third-party licence.
+
+14. Contributions
+
+Unless a separate contribution agreement states otherwise, contributors retain copyright in contributions they independently create.
+
+Submission of a contribution does not automatically transfer ownership of that contribution.
+
+A contribution may be incorporated into the Software only under terms acceptable to the copyright holder.
+
+The copyright holder may require a Contributor Licence Agreement or other written permission before accepting substantial contributions.
+
+15. No Implied Licence
+
+No rights are granted by implication, estoppel, public availability, repository visibility, publication of source code, previous tolerance of particular conduct, or any other means.
+
+Only rights expressly granted under this licence or separately granted in writing are provided.
+
+16. Separate Licensing
+
+The copyright holder may offer additional licences, including:
+
+* commercial licences;
+* business-use licences;
+* modification licences;
+* redistribution licences;
+* OEM licences;
+* integration licences;
+* enterprise licences;
+* source-code licences.
+
+Granting additional rights to one person or organisation does not grant those rights to anyone else.
+
+17. Termination
+
+The rights granted by this licence automatically terminate if you materially breach its terms.
+
+Upon termination, you must cease activities that relied upon permissions granted by this licence.
+
+Termination does not affect provisions that by their nature survive termination, including ownership, copyright, attribution, limitations of liability and restrictions concerning unauthorised exploitation.
+
+18. Statutory Rights and Exceptions
+
+Nothing in this licence is intended to exclude, restrict or modify any right, defence, exception, guarantee or remedy that cannot lawfully be excluded, restricted or modified under applicable law.
+
+Where applicable law permits an activity regardless of contractual restriction, this licence does not purport to remove that statutory right.
+
+19. No Warranty
+
+THE SOFTWARE IS PROVIDED “AS IS” AND “AS AVAILABLE”, WITHOUT WARRANTY OF ANY KIND, TO THE MAXIMUM EXTENT PERMITTED BY LAW.
+
+THE COPYRIGHT HOLDER DOES NOT WARRANT THAT THE SOFTWARE WILL BE ERROR-FREE, SECURE, UNINTERRUPTED, COMPATIBLE WITH ANY PARTICULAR SYSTEM, OR SUITABLE FOR ANY PARTICULAR PURPOSE.
+
+NOTHING IN THIS LICENCE EXCLUDES OR RESTRICTS A GUARANTEE, RIGHT OR REMEDY THAT CANNOT LAWFULLY BE EXCLUDED OR RESTRICTED.
+
+20. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE COPYRIGHT HOLDER WILL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY OR CONSEQUENTIAL LOSS ARISING FROM THE USE OF OR INABILITY TO USE THE SOFTWARE.
+
+THIS PROVISION DOES NOT EXCLUDE OR LIMIT LIABILITY WHERE SUCH EXCLUSION OR LIMITATION IS PROHIBITED BY LAW.
+
+21. Governing Law
+
+Unless otherwise specified by the copyright holder and to the extent permitted by applicable law, this licence is governed by the laws of the jurisdiction in which the copyright holder principally resides or operates.
+
+22. Permission Requests
+
+Requests for permission to:
+
+* use the Software commercially;
+* modify the Software;
+* redistribute the Software;
+* integrate the Software into another product;
+* create derivative works;
+* obtain an alternative licence;
+
+should be directed to the copyright holder using the contact information published in the official project repository or associated project documentation.
+
+⸻
+
+Plain-English Summary
+
+You may generally:
+
+* download the Software;
+* install it;
+* use it personally;
+* use it for hobbies and learning;
+* inspect the source code;
+* evaluate it;
+* link other people to the official project.
+
+Without additional permission, you may generally not:
+
+* sell it;
+* use it commercially;
+* use it as part of a business operation;
+* charge people to access it;
+* turn it into a SaaS or paid service;
+* modify and redistribute it;
+* publish your own altered version;
+* repackage it;
+* incorporate substantial parts into another commercial product;
+* remove copyright or licence notices;
+* claim authorship;
+* use substantial portions as AI/model-training material;
+* distribute unofficial copies.
+
+Public availability does not mean that the Software is public domain or open source.
+
+The copyright holder retains ownership and all rights not expressly granted.
+
+This summary is explanatory only. The full licence controls if there is any inconsistency.
