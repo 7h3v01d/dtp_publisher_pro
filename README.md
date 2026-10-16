@@ -235,5 +235,4 @@ afterwards.
 
 ---
 
-© 2026 Leon Priest (GitHub: [7h3v01d](https://github.com/7h3v01d)). Licensed
-under the Apache License, Version 2.0 — see `LICENSE`.
+© 2026 Leon Priest (GitHub: [7h3v01d](https://github.com/7h3v01d)). (See [LICENSE](licence)).
