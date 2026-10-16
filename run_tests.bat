@@ -1,5 +1,5 @@
 @echo off
-rem SPDX-License-Identifier: Apache-2.0
+rem SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 rem Run the test suite (creates/updates .venv with dev requirements).
 setlocal
 cd /d "%~dp0"

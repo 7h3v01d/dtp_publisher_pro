@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 # Copyright 2026 Leon Priest (GitHub: 7h3v01d)
 """Autosave against Save / close: a recovery file must never outlive a real save.
 

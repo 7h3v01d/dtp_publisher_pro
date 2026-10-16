@@ -1,9 +1,15 @@
 DTP Publisher Pro
-Copyright 2026 Leon Priest (GitHub: 7h3v01d)
+Copyright 2026 Leon Priest (GitHub: 7h3v01d). All rights reserved.
 
-This product is licensed under the Apache License, Version 2.0.
-It uses PyQt6 (Riverbank Computing) and Qt 6 (The Qt Company), which are
-distributed under their own licences.
+This software is licensed under the Restricted Use Software Licence v1.1
+(see LICENSE): free for personal, educational, hobby and other
+non-commercial use; commercial use, redistribution and derivative works
+need the copyright holder's written permission.
+
+Third-party components keep their own licences (LICENSE section 13):
+- PyQt6 (Riverbank Computing): GPL v3 or the Riverbank Commercial License.
+- Qt 6 (The Qt Company): LGPL v3 (as included in the PyQt6 wheels).
+Built copies of the program contain these components.
 
 Opening Microsoft Publisher files uses LibreOffice (The Document Foundation,
 MPL 2.0), which must be installed separately and is run as a separate

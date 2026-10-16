@@ -1,5 +1,5 @@
 @echo off
-rem SPDX-License-Identifier: Apache-2.0
+rem SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 rem Build DTP Publisher as ONE file: dist-single\DTP Publisher.exe (no Python needed).
 rem Easier to copy, but it unpacks itself each time it starts, so it opens a few
 rem seconds slower than the folder made by build_exe.bat.

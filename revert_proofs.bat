@@ -1,5 +1,5 @@
 @echo off
-rem SPDX-License-Identifier: Apache-2.0
+rem SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 rem Re-break every fixed bug in a temp copy and check its regression test fails.
 setlocal
 cd /d "%~dp0"

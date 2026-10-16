@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 # Copyright 2026 Leon Priest (GitHub: 7h3v01d)
 """The story model (items/richtext.py): whatever comes in - pasted from Word or
 a browser, typed, or loaded from an old file - a text box ends up holding only

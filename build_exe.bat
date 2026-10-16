@@ -1,5 +1,5 @@
 @echo off
-rem SPDX-License-Identifier: Apache-2.0
+rem SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 rem Build a stand-alone Windows program in dist\DTP Publisher\ (no Python needed to run it).
 rem Copy that whole folder to the other PC and double-click "DTP Publisher.exe".
 rem (For a single .exe file instead, use build_onefile.bat.)

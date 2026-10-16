@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 # Copyright 2026 Leon Priest (GitHub: 7h3v01d)
 """FlowLayout: identical to Qt's layout when nothing is in the way, and text
 wrap around pictures / through boxes of different widths when something is."""

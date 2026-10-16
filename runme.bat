@@ -1,5 +1,5 @@
 @echo off
-rem SPDX-License-Identifier: Apache-2.0
+rem SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 rem DTP Publisher Pro - double-click to start. First run sets everything up.
 setlocal
 cd /d "%~dp0"

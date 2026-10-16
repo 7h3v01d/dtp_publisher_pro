@@ -4,11 +4,9 @@ A friendly desktop publishing program in the spirit of Microsoft Publisher, for
 flyers, signs, posters, newsletters, greeting cards, invitations, postcards,
 address labels, business cards and photo albums.
 
-Python 3.11+ · PyQt6 · Windows (also runs on Linux/macOS) · Apache 2.0
+Python 3.11+ · PyQt6 · Windows (also runs on Linux/macOS) · Restricted Use Software Licence v1.1 (non-commercial)
 
 ---
-
-<img width="1920" height="1040" alt="screenshot" src="screenshot.png" />
 
 ## Starting it
 
@@ -235,4 +233,17 @@ afterwards.
 
 ---
 
-© 2026 Leon Priest (GitHub: [7h3v01d](https://github.com/7h3v01d)). Licensed under Restricted Use Software Licence v1.1 (See [LICENSE](LICENSE)).
+## Licence
+
+© 2026 Leon Priest (GitHub: [7h3v01d](https://github.com/7h3v01d)). All rights
+reserved. Licensed under the **Restricted Use Software Licence v1.1** — see
+`LICENSE`. In short: you're welcome to download, use and study it for personal,
+educational, hobby and other non-commercial purposes. Selling it, using it in a
+business, publishing changed versions or reusing substantial parts needs written
+permission. For permission or a commercial licence, contact the author through
+GitHub ([7h3v01d](https://github.com/7h3v01d)).
+
+This licence applies from version 5.3.5. Copies of earlier versions carry the
+Apache License 2.0 they were issued with.
+
+The program uses PyQt6 and Qt 6, which keep their own licences (see `NOTICE`).

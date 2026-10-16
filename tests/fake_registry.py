@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 # Copyright 2026 Leon Priest (GitHub: 7h3v01d)
 """A stand-in for HKEY_CURRENT_USER.  conftest.py gives every test a fresh
 one, so no test ever reads or writes the real Windows registry."""

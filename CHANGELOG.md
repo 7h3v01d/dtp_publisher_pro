@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.3.5 — 2026-10-16 (licence)
+
+### Changed
+- **New licence: Restricted Use Software Licence v1.1** (was Apache 2.0).
+  Free for personal, educational, hobby and other non-commercial use;
+  commercial use, redistribution, changed versions and reuse of substantial
+  parts need the author's written permission. Every file's notice, `NOTICE`,
+  the README and the About box say so, and a test keeps them consistent.
+
 ## 5.3.4 — 2026-10-16
 
 ### Changed
