@@ -235,4 +235,4 @@ afterwards.
 
 ---
 
-© 2026 Leon Priest (GitHub: [7h3v01d](https://github.com/7h3v01d)). Licenced under Restricted Use Software Licence v1.1 (See [LICENSE](licence)).
+© 2026 Leon Priest (GitHub: [7h3v01d](https://github.com/7h3v01d)). Licensed under Restricted Use Software Licence v1.1 (See [LICENSE](LICENSE)).
