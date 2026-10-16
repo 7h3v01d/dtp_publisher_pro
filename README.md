@@ -6,6 +6,8 @@ address labels, business cards and photo albums.
 
 Python 3.11+ · PyQt6 · Windows (also runs on Linux/macOS) · Restricted Use Software Licence v1.1 (non-commercial)
 
+<img width="1920" height="1040" alt="screenshot" src="screenshot.png" />
+
 ---
 
 ## Starting it
