@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 # Copyright 2026 Leon Priest (GitHub: 7h3v01d)
 """Vector icons drawn with QPainter, so they recolour with the theme and stay
 crisp at any UI scale (no image files to ship)."""

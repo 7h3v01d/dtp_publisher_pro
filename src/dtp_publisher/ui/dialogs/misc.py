@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 # Copyright 2026 Leon Priest (GitHub: 7h3v01d)
 """Preferences, export-pictures, fill-page, recovery and about dialogs."""
 
@@ -216,4 +216,8 @@ def about_text() -> str:
     return (f"<h3>{APP_NAME} {__version__}</h3>"
             "<p>A friendly desktop publishing program for flyers, newsletters, cards, "
             "labels and photo albums.</p>"
-            "<p>© 2026 Leon Priest (GitHub: 7h3v01d)<br>Licensed under the Apache License 2.0.</p>")
+            "<p>© 2026 Leon Priest (GitHub: 7h3v01d). All rights reserved.</p>"
+            "<p>Free to use for personal, educational, hobby and other non-commercial "
+            "purposes. Selling it, using it in a business, or sharing changed copies needs "
+            "the author's written permission. See the LICENSE file "
+            "(Restricted Use Software Licence v1.1).</p>")

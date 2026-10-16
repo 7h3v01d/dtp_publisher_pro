@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Restricted-Use-1.1
 # Copyright 2026 Leon Priest (GitHub: 7h3v01d)
 """DTP Publisher Pro — a desktop publishing app in the spirit of MS Publisher."""
 
-__version__ = "5.3.4"
+__version__ = "5.3.5"
 APP_NAME = "DTP Publisher Pro"
 APP_ORG = "7h3v01d"
 FILE_EXT = ".dtpub"
